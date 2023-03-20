@@ -1,0 +1,1 @@
+ASSETS_FOLDER = '/home/fizzer/Insync/1mackenziekyle@gmail.com/Google Drive/enph353/enph353_competition/assets/'
