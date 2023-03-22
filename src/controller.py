@@ -72,37 +72,40 @@ class Controller:
         # self.show_camera_feed(self.camera_feed)
 
         # START TEMP
+        min_red = (0, 200, 200)   # lower end of blue
+        max_red = (255, 255, 255)   # upper end of blue
 
+        min_shirt =(5,60,60)
+        max_shirt = (12,90,90)
+        # Binary mask for blue pixels
         hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
-
-        min_red = np.asarray([0, 180, 180])   # lower end of blue
-        max_red = np.asarray([255, 255, 255])   # upper end of blue
-
-        mask = hsv_feed[:,:,0].copy()
-
-
-        cv2.inRange(hsv_feed, min_red, max_red, mask)
-
-        # contours
-        contours, hierarchy = cv2.findContours(image=mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
-        # only take valid contours
+        red_mask = cv2.inRange(hsv_feed, min_red, max_red)
+        skin_mask = cv2.inRange(hsv_feed, min_shirt, max_shirt)
+        red_contours, red_hierarchy = cv2.findContours(image=red_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
         red_cntrs = []
-        for c in contours:
+        for c in red_contours:
             if cv2.contourArea(c) > 1:
                 red_cntrs.append(c)
-
         for i in range(len(red_cntrs)):
             # define bounding rectangle
             x,y,w,h = cv2.boundingRect(red_cntrs[i])
             cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,255,255),2) 
-
-
-        cv2.imshow('mask', self.downsample_image(mask,2))
+        skin_contours, skin_hierarchy = cv2.findContours(image=skin_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
+        skin_cntrs = []
+        for c in skin_contours:
+            if cv2.contourArea(c) > 1:
+                skin_cntrs.append(c)
+        for i in range(len(skin_cntrs)):
+            # define bounding rectangle
+            x,y,w,h = cv2.boundingRect(skin_cntrs[i])
+            cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,255,0),2) 
+        cv2.imshow('mask', self.downsample_image(hsv_feed , 2))
         cv2.waitKey(1)
         cv2.imshow('video feed', self.downsample_image(self.camera_feed, 2))
-
+        cv2.waitKey(1)
+        print('-----')
         print(len(red_cntrs), 'red contours.')
-
+        print(len(skin_cntrs), 'skin contours.')
         # END TEMP
         
         # Jump to state
@@ -155,9 +158,9 @@ class Controller:
 
     def call_driving_model(self, camera_feed):
         # downsample
-        image = self.downsample_image(image, self.image_resize_factor, cv2.COLOR_BGR2GRAY)
-        image = tf.expand_dims(image, 0) # expand dim 0
-        softmaxes = tf.squeeze(self.driving_model(image),0) 
+        camera_feed_gray =  self.downsample_image(camera_feed, self.image_resize_factor, color_converter=cv2.COLOR_BGR2GRAY)
+        camera_feed_gray = tf.expand_dims(camera_feed_gray, 0) # expand dim 0
+        softmaxes = tf.squeeze(self.driving_model(camera_feed_gray),0) 
         return softmaxes
 
     
@@ -195,8 +198,8 @@ class Controller:
         shape = img.shape
         resized_shape = (shape[1] // factor, shape[0] // factor)
         out =  cv2.resize(img, resized_shape, interpolation=cv2.INTER_AREA)
-        if self.color_converter is not None:
-            out = cv2.cvtColor(out, self.color_converter, out)
+        if color_converter is not None:
+            out = cv2.cvtColor(out, color_converter)
         return out
     
     def show_camera_feed(self, raw_camera_feed):

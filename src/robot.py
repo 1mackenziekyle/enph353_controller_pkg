@@ -8,7 +8,7 @@ from config import ASSETS_FOLDER
 # Constants
 # relative paths (inside ASSETS FOLDER)
 IMAGE_SAVE_FOLDER = 'images/outer_lap/color_pedestrian_walkway1'
-DRIVING_MODEL_LOAD_FOLDER = 'models/outer_loop/gray_diagonal_driving1'
+DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/gray_diagonal_driving1'
 OPERATING_MODE = controller.Operating_Mode.MANUAL
 COLOR_CONVERTER = None
 LINEAR_SPEED = 0.3645
@@ -25,7 +25,7 @@ robot = controller.Controller(
     image_type=controller.Image_Type.GRAY,
     start_snapshots=100,
     snapshot_freq=2,
-    image_resize_factor=1,
+    image_resize_factor=20,
     publisher=rospy.Publisher('/R1/cmd_vel', Twist, queue_size=1),
     drive_diagonal=True,
     driving_model_path=ASSETS_FOLDER + DRIVING_MODEL_LOAD_FOLDER,
