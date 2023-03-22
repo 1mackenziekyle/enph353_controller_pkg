@@ -69,7 +69,7 @@ class Controller:
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
         # show video output
-        self.show_camera_feed(self.camera_feed)
+        # self.show_camera_feed(self.camera_feed)
 
         # START TEMP
 
@@ -79,9 +79,29 @@ class Controller:
         max_red = np.asarray([255, 255, 255])   # upper end of blue
 
         mask = hsv_feed[:,:,0].copy()
+
+
         cv2.inRange(hsv_feed, min_red, max_red, mask)
+
+        # contours
+        contours, hierarchy = cv2.findContours(image=mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
+        # only take valid contours
+        red_cntrs = []
+        for c in contours:
+            if cv2.contourArea(c) > 1:
+                red_cntrs.append(c)
+
+        for i in range(len(red_cntrs)):
+            # define bounding rectangle
+            x,y,w,h = cv2.boundingRect(red_cntrs[i])
+            cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,255,255),2) 
+
+
         cv2.imshow('mask', self.downsample_image(mask,2))
         cv2.waitKey(1)
+        cv2.imshow('video feed', self.downsample_image(self.camera_feed, 2))
+
+        print(len(red_cntrs), 'red contours.')
 
         # END TEMP
         
