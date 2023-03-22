@@ -6,29 +6,41 @@ from sensor_msgs.msg import Image
 from config import ASSETS_FOLDER
 
 # Constants
+# relative paths (inside ASSETS FOLDER)
+IMAGE_SAVE_FOLDER = 'images/outer_lap/color_pedestrian_walkway1'
+DRIVING_MODEL_LOAD_FOLDER = 'models/outer_loop/gray_diagonal_driving1'
+OPERATING_MODE = controller.Operating_Mode.MANUAL
+COLOR_CONVERTER = None
+LINEAR_SPEED = 0.3645
+ANGULAR_SPEED = 1.21
 
 
-
-# ============ Start Loop =============
+# init ros node
 rospy.init_node('robot', anonymous=True)
 
 # initialize controller object
 robot = controller.Controller(
-    driving_mode=controller.Driving_Mode.TAKE_PICTURES,
-    image_save_location=ASSETS_FOLDER + 'outer_lap_gray',
+    operating_mode=OPERATING_MODE,
+    image_save_location=ASSETS_FOLDER + IMAGE_SAVE_FOLDER,
+    image_type=controller.Image_Type.GRAY,
     start_snapshots=100,
-    snapshot_freq=1,
-    image_resize_factor=20,
+    snapshot_freq=2,
+    image_resize_factor=1,
     publisher=rospy.Publisher('/R1/cmd_vel', Twist, queue_size=1),
-    model_path='./assets/models/drive_outer_loop/',
-    linear_speed=1.0,
-    angular_speed=1.0
+    drive_diagonal=True,
+    driving_model_path=ASSETS_FOLDER + DRIVING_MODEL_LOAD_FOLDER,
+    linear_speed=LINEAR_SPEED,
+    angular_speed=ANGULAR_SPEED,
+    color_converter=COLOR_CONVERTER
     )
-if robot.driving_mode is controller.Driving_Mode.MODEL:
+
+# load model if in model mode
+if robot.operating_mode is controller.Operating_Mode.MODEL:
     robot.load_model()
 
-# subscribers
+# set up subscribers
 rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=robot.step)
-rospy.Subscriber('R1/cmd_vel', Twist, callback=robot.read_velocities)
+rospy.Subscriber('R1/cmd_vel', Twist, callback=robot.store_velocities)
+
 # forever
 rospy.spin()

@@ -9,137 +9,192 @@ import datetime
 from keras import models, layers
 from enum import Enum
 import tensorflow as tf
+import os
+
 
 # Driving Mode
-class Driving_Mode(Enum):
+
+
+
+class Operating_Mode(Enum):
     MANUAL = 1,
     MODEL = 2
     TAKE_PICTURES = 3
 
+class ControllerState(Enum):
+    INIT = 1,
+    DRIVE_OUTER_LOOP = 2,
+    WAIT_FOR_PEDESTRIAN = 3,
+    MANUAL_DRIVE = 4
+
+# type of input image to model
+class Image_Type(Enum):
+    BGR = 1,
+    GRAY = 2
+
+
+
+
+
 class Controller:
-    def __init__(self, driving_mode, image_save_location, start_snapshots, snapshot_freq, 
-                 image_resize_factor, publisher, model_path, linear_speed, angular_speed):
+
+    # ========= Initialization =========
+
+    def __init__(self, operating_mode, image_save_location, image_type, start_snapshots, snapshot_freq, 
+                 image_resize_factor, publisher, drive_diagonal, driving_model_path, linear_speed, angular_speed, color_converter):
         self.bridge = CvBridge()
         self.iters = 0
         self.vels = Twist()
-        self.driving_mode = driving_mode
+        self.camera_feed = None
         self.image_save_location=image_save_location
+        self.image_type = image_type
         self.start_snapshots = start_snapshots
         self.snapshot_freq = snapshot_freq
         self.image_resize_factor = image_resize_factor
         self.publisher=publisher
-        self.model_path = model_path
+        self.drive_diagonal = drive_diagonal
+        self.driving_model_path = driving_model_path
         self.linear_speed = linear_speed
         self.angular_speed = angular_speed
-        self.model=None
+        self.operating_mode = operating_mode
+        self.state = ControllerState.INIT
+        self.color_converter = color_converter
+        self.driving_model=None
         
-
     def load_model(self):
-        self.model = tf.keras.models.load_model(self.model_path)
+        self.driving_model = tf.keras.models.load_model(self.driving_model_path)
+
 
     def step(self, data):
         self.iters+=1
-        # read camera message
-        raw_camera = self.read_camera_message(data)
+        self.camera_feed = self.convert_image_topic_to_cv_image(data)
         # show video output
-        self.show_camera_feed(raw_camera)
-        # save picture
-        if self.driving_mode == Driving_Mode.TAKE_PICTURES and self.iters > self.start_snapshots and self.iters % self.snapshot_freq == 0:
-            self.save_image(cv2.cvtColor(self.resize(raw_camera, self.image_resize_factor), cv2.COLOR_BGR2GRAY), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
-        # model
-        elif self.driving_mode == Driving_Mode.MODEL:
-            action = self.choose_action(raw_camera)
-            self.publish_cmd_vel(action)
+        self.show_camera_feed(self.camera_feed)
 
-    def choose_action(self,image):
-        image = self.resize(image, self.image_resize_factor)
-        return np.argmax(self.model(tf.expand_dims(image,0)))
-    
-    def publish_cmd_vel(self, action):
-        out = Twist()
-        if action == 0:
-            out.linear.x = 0.5 * self.linear_speed
-        elif action == 1:
-            out.angular.z = 1.0 * self.angular_speed
-        else:
-            out.angular.z = -1.0 * self.angular_speed
-        self.publisher.publish(out)
+        # START TEMP
 
-    def show_camera_feed(self, raw_camera_image):
-        cv2.imshow("Robot view", self.display_velocities(self.resize(raw_camera_image, 2)))
+        hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
+
+        min_red = np.asarray([0, 180, 180])   # lower end of blue
+        max_red = np.asarray([255, 255, 255])   # upper end of blue
+
+        mask = hsv_feed[:,:,0].copy()
+        cv2.inRange(hsv_feed, min_red, max_red, mask)
+        cv2.imshow('mask', self.downsample_image(mask,2))
         cv2.waitKey(1)
+
+        # END TEMP
+        
+        # Jump to state
+        if self.state == ControllerState.INIT:
+            self.RunInitState()
+        elif self.state == ControllerState.DRIVE_OUTER_LOOP:
+            self.RunDriveOuterLoopState()
+        elif self.state == ControllerState.MANUAL_DRIVE:
+            self.RunManualDriveState()
+        elif self.state == ControllerState.WAIT_FOR_PEDESTRIAN:
+            self.RunWaitForPedestrianState()
+
+    # ========= States ===============
+
+    # Switch to drive state
+    def RunInitState(self):
+        # start outer loop if in Model mode
+        if self.operating_mode == Operating_Mode.MODEL:
+            self.state = ControllerState.DRIVE_OUTER_LOOP
+        # start manual driving if in manual mode
+        elif self.operating_mode == Operating_Mode.MANUAL or self.operating_mode == Operating_Mode.TAKE_PICTURES:
+            self.state = ControllerState.MANUAL_DRIVE
+
+
+    def RunDriveOuterLoopState(self):
+        predicted_action = np.argmax(self.call_driving_model(self.camera_feed)) 
+        move = self.convert_action_to_cmd_vel(predicted_action, self.drive_diagonal)
+        self.publisher.publish(move)
+
+
+    def RunManualDriveState(self):
+        # take pictures if neededs
+        if self.operating_mode == Operating_Mode.TAKE_PICTURES and self.iters > self.start_snapshots and self.iters % self.snapshot_freq == 0:
+            self.save_image(self.downsample_image(self.camera_feed, self.image_resize_factor, self.color_converter), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
+            if self.iters % 100 == 0:
+                print('image folder has ', len(os.listdir(self.image_save_location)), 'images')
+        return
+
+
+    
+    def RunWaitForPedestrianState(self):
+        # wait for pedestrian
+        self.state = ControllerState.DRIVE_OUTER_LOOP
+        print('waiting for pedestian')
+
+
+
+
+    # =========== Utilities =============
+
+    def call_driving_model(self, camera_feed):
+        # downsample
+        image = self.downsample_image(image, self.image_resize_factor, cv2.COLOR_BGR2GRAY)
+        image = tf.expand_dims(image, 0) # expand dim 0
+        softmaxes = tf.squeeze(self.driving_model(image),0) 
+        return softmaxes
+
+    
+    def convert_image_topic_to_cv_image(self, camera_topic):
+        return self.bridge.imgmsg_to_cv2(camera_topic, 'bgr8')
+
+    def convert_action_to_cmd_vel(self, action, drive_diagonal):
+        out = Twist()
+        if not drive_diagonal: # drive straight mode
+            if action == 0:
+                out.linear.x = 0.5
+            elif action == 1:
+                out.angular.z = 1.0 
+            else:
+                out.angular.z = -1.0
+        else:
+            out.linear.x = self.linear_speed
+            if action == 1:
+                out.angular.z = self.angular_speed
+            elif action == 2:
+                out.angular.z = -1 * self.angular_speed
+        return out
 
     def read_camera_message(self, msg):
         return self.bridge.imgmsg_to_cv2(msg, 'bgr8')
 
-    def read_velocities(self, data):
-        self.vels = data
+    def store_velocities(self, vels_topic):
+        self.vels = vels_topic
 
-    def save_image(self, image: cv2.Mat, filename: str):
+    def save_image(self, image, filename):
         print(' saving image', self.image_save_location + '/' + filename + '.jpg')
-        try:
-            cv2.imwrite(self.image_save_location + '/' + filename + '.png', image)
-        except:
-            print("failed saving image.")
+        cv2.imwrite(self.image_save_location + '/' + filename + '.png', image)
 
-    def draw_lines(edge_img, out):
-        lines = cv2.HoughLines(edge_img, 1, np.pi / 180, 150, None, 0, 0)
-        if lines is not None:
-            for i in range(0, len(lines)):
-                rho = lines[i][0][0]
-                theta = lines[i][0][1]
-                a = np.cos(theta)
-                b = np.sin(theta)
-                x0 = a * rho
-                y0 = b * rho
-                pt1 = (int(x0 + 1000*(-b)), int(y0 + 1000*(a)))
-                pt2 = (int(x0 - 1000*(-b)), int(y0 - 1000*(a)))
-                cv2.line(out, pt1, pt2, (0,0,255), 1, cv2.LINE_AA)
-        return out
-
-    def resize(self, img, factor):
+    def downsample_image(self, img, factor, color_converter=None):
         shape = img.shape
         resized_shape = (shape[1] // factor, shape[0] // factor)
-        return cv2.resize(img, resized_shape, interpolation=cv2.INTER_AREA)
+        out =  cv2.resize(img, resized_shape, interpolation=cv2.INTER_AREA)
+        if self.color_converter is not None:
+            out = cv2.cvtColor(out, self.color_converter, out)
+        return out
     
-    def get_edges_image(self, image, min, max):
-        return cv2.Canny(image, min, max)
-    
-    def display_velocities(self, input_image):
+    def show_camera_feed(self, raw_camera_feed):
+        raw_camera_feed = self.downsample_image(raw_camera_feed, 2) # downsample by 2
+        labelled_video_feed = self.annotate_image(raw_camera_feed)
+        cv2.imshow("Camera feed", labelled_video_feed)
+        cv2.waitKey(1)
+
+    def annotate_image(self, input_image):
         out = input_image.copy()
         velocity_array = [self.vels.linear.x, self.vels.linear.y, self.vels.linear.z, self.vels.angular.z]
         velocity_attributes_and_values = [s + ': ' + str(m) for s, m in zip(['x', 'y', 'z', 'angular'], velocity_array)]
         for i in range(len(velocity_attributes_and_values)):
             cv2.putText(img=out, text=velocity_attributes_and_values[i], org=(20,20+40*i), 
             fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
-        cv2.putText(img=out, text="iters: " + str(self.iters), org=(100, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
+        cv2.putText(img=out, text="iters: " + str(self.iters), org=(150, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         return out
 
 
 
 
-
-# ============ Start Loop =============
-# rospy.init_node('controller', anonymous=True)
-
-# initialize controller object
-# controller = Controller(
-#     driving_mode=Driving_Mode.TAKE_PICTURES,
-#     image_save_location='./assets/images/outer_lap2',
-#     start_snapshots=100,
-#     snapshot_freq=1,
-#     image_resize_factor=20,
-#     publisher=rospy.Publisher('/R1/cmd_vel', Twist, queue_size=1),
-#     model_path='./assets/models/drive_outer_loop/',
-#     linear_speed=1.0,
-#     angular_speed=1.0
-#     )
-# if controller.driving_mode is Driving_Mode.MODEL:
-#     controller.load_model()
-
-
-# # subscribers
-# rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=controller.step)
-# rospy.Subscriber('R1/cmd_vel', Twist, callback=controller.read_velocities)
-# # forever
-# rospy.spin()
