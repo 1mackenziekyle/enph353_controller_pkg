@@ -6,7 +6,6 @@ import rospy
 import cv2
 import numpy as np
 import datetime
-from keras import models, layers
 from enum import Enum
 import tensorflow as tf
 import os
