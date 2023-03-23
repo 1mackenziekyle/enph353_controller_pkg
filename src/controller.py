@@ -9,6 +9,7 @@ import datetime
 from enum import Enum
 import tensorflow as tf
 import os
+import time
 
 
 # Driving Mode
@@ -21,10 +22,10 @@ class Operating_Mode(Enum):
     TAKE_PICTURES = 3
 
 class ControllerState(Enum):
-    INIT = 1,
-    DRIVE_OUTER_LOOP = 2,
-    WAIT_FOR_PEDESTRIAN = 3,
-    MANUAL_DRIVE = 4
+    INIT = 4,
+    DRIVE_OUTER_LOOP = 3,
+    WAIT_FOR_PEDESTRIAN = 2,
+    MANUAL_DRIVE = 1
 
 # type of input image to model
 class Image_Type(Enum):
@@ -70,42 +71,11 @@ class Controller:
         # show video output
         # self.show_camera_feed(self.camera_feed)
 
-        # START TEMP
-        min_red = (0, 200, 170)   # lower end of blue
-        max_red = (255, 255, 255)   # upper end of blue
 
-        min_shirt =(5,60,60)
-        max_shirt = (12,90,90)
-        # Binary mask for blue pixels
-        hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
-        red_mask = cv2.inRange(hsv_feed, min_red, max_red)
-        skin_mask = cv2.inRange(hsv_feed, min_shirt, max_shirt)
-        red_contours, red_hierarchy = cv2.findContours(image=red_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
-        red_cntrs = []
-        for c in red_contours:
-            if cv2.contourArea(c) > 1:
-                red_cntrs.append(c)
-        for i in range(len(red_cntrs)):
-            # define bounding rectangle
-            x,y,w,h = cv2.boundingRect(red_cntrs[i])
-            cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,255,255),2) 
-        skin_contours, skin_hierarchy = cv2.findContours(image=skin_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
-        skin_cntrs = []
-        for c in skin_contours:
-            if cv2.contourArea(c) > 1:
-                skin_cntrs.append(c)
-        for i in range(len(skin_cntrs)):
-            # define bounding rectangle
-            x,y,w,h = cv2.boundingRect(skin_cntrs[i])
-            cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,255,0),2) 
-        cv2.imshow('mask', self.downsample_image(red_mask +  skin_mask, 2))
-        cv2.waitKey(1)
+        print('=== state: ', self.state)
+        # display 
         cv2.imshow('video feed', self.downsample_image(self.camera_feed, 2))
         cv2.waitKey(1)
-        print('-----')
-        print(len(red_cntrs), 'red contours.')
-        print(len(skin_cntrs), 'skin contours.')
-        # END TEMP
         
         # Jump to state
         if self.state == ControllerState.INIT:
@@ -131,8 +101,14 @@ class Controller:
 
     def RunDriveOuterLoopState(self):
         predicted_action = np.argmax(self.call_driving_model(self.camera_feed)) 
-        move = self.convert_action_to_cmd_vel(predicted_action, self.drive_diagonal)
+        if self.check_if_at_crosswalk():
+            move = Twist() # don't move
+            self.state = ControllerState.WAIT_FOR_PEDESTRIAN # state transition ? 
+            print(f"state changed to {self.state}")
+        else:
+            move = self.convert_action_to_cmd_vel(predicted_action, self.drive_diagonal)
         self.publisher.publish(move)
+        return
 
 
     def RunManualDriveState(self):
@@ -147,13 +123,93 @@ class Controller:
     
     def RunWaitForPedestrianState(self):
         # wait for pedestrian
-        self.state = ControllerState.DRIVE_OUTER_LOOP
-        print('waiting for pedestian')
+        min_skin =(5,60,60)
+        max_skin = (12,90,90)
+
+        wait_flag = True
+        hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
+        skin_mask = cv2.inRange(hsv_feed, min_skin, max_skin)
+
+        skin_contours, skin_hierarchy = cv2.findContours(image=skin_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
+
+        skin_cntrs = []
+
+        for c in skin_contours:
+            if cv2.contourArea(c) > 10:
+                skin_cntrs.append(c)
+
+        if len(skin_cntrs) > 0:
+            # define bounding rectangle
+            x,y,w,h = cv2.boundingRect(skin_cntrs[0])
+            cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,255,0),2) 
+            # check if at center:
+            TOL_SKIN = 30
+            for c in skin_cntrs:
+                M = cv2.moments(c)
+                cX = int(M["m10"] / M["m00"])
+            if abs(cX- skin_mask.shape[1]//2) < TOL_SKIN:
+                self.state = ControllerState.DRIVE_OUTER_LOOP
+                print(f'state changed to {self.state}')
+
+        cv2.imshow('mask', self.downsample_image(skin_mask, 2))
+        cv2.waitKey(1)
+
+        # return to drive outer loop
 
 
 
 
     # =========== Utilities =============
+
+    def check_if_at_crosswalk(self):
+        Y_exp_of_first_cntr = 600
+        Y_exp_of_second_cntr = 410
+        radius_of_tolerance = 50
+
+        at_crosswalk_flag = False
+        min_red = (0, 200, 170)   # lower end of blue
+        max_red = (255, 255, 255)   # upper end of blue
+
+        # Binary mask for blue pixels
+        hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
+        red_mask = cv2.inRange(hsv_feed, min_red, max_red)
+
+        # get contours
+        red_contours, red_hierarchy = cv2.findContours(image=red_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
+        red_cntrs = []
+
+        # only take contours with area > 5
+        for c in red_contours:
+            if cv2.contourArea(c) > 5:
+                red_cntrs.append(c)
+
+        # sort red counters based on area
+        red_c = sorted(red_cntrs, key = lambda x : cv2.contourArea(x)) # sort by x value
+
+        # draw bounding rectangles
+        for i in range(len(red_cntrs)):
+            # define bounding rectangle
+            x,y,w,h = cv2.boundingRect(red_cntrs[i])
+            cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,255,255),2) 
+
+        red_centroids = []
+        if len(red_cntrs) == 2:
+            for c in red_cntrs:
+                M = cv2.moments(c)
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+                red_centroids.append((cX, cY))
+
+            # check if STOP
+            if abs(red_centroids[0][1] - 650) < radius_of_tolerance and abs(red_centroids[1][1] - 410) < radius_of_tolerance:
+                at_crosswalk_flag = True
+                print("Reached crosswalk.")
+
+        cv2.imshow('mask', self.downsample_image(red_mask, 2))
+        cv2.waitKey(1)
+
+        return at_crosswalk_flag
+
 
     def call_driving_model(self, camera_feed):
         # downsample
