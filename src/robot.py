@@ -8,8 +8,8 @@ from config import ASSETS_FOLDER
 # Constants
 # relative paths (inside ASSETS FOLDER)
 IMAGE_SAVE_FOLDER = 'images/outer_lap/gray_manual_recenter'
-DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/temp'
-OPERATING_MODE = controller.Operating_Mode.TAKE_PICTURES
+DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/gray_diagonal_driving1'
+OPERATING_MODE = controller.Operating_Mode.MODEL
 COLOR_CONVERTER = None
 LINEAR_SPEED = 0.3645
 ANGULAR_SPEED = 1.21
