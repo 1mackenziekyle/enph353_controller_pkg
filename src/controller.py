@@ -71,7 +71,7 @@ class Controller:
         # self.show_camera_feed(self.camera_feed)
 
         # START TEMP
-        min_red = (0, 200, 200)   # lower end of blue
+        min_red = (0, 200, 170)   # lower end of blue
         max_red = (255, 255, 255)   # upper end of blue
 
         min_shirt =(5,60,60)
@@ -98,7 +98,7 @@ class Controller:
             # define bounding rectangle
             x,y,w,h = cv2.boundingRect(skin_cntrs[i])
             cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,255,0),2) 
-        cv2.imshow('mask', self.downsample_image(hsv_feed , 2))
+        cv2.imshow('mask', self.downsample_image(red_mask +  skin_mask, 2))
         cv2.waitKey(1)
         cv2.imshow('video feed', self.downsample_image(self.camera_feed, 2))
         cv2.waitKey(1)
