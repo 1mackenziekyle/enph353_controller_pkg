@@ -60,6 +60,7 @@ class Controller:
         self.state = ControllerState.INIT
         self.color_converter = color_converter
         self.driving_model=None
+        self.take_pictures = True
         
     def load_model(self):
         self.driving_model = tf.keras.models.load_model(self.driving_model_path)
@@ -112,8 +113,10 @@ class Controller:
 
 
     def RunManualDriveState(self):
+        print(self.vels)
+        print('Take Pictures: ', self.take_pictures)
         # take pictures if neededs
-        if self.operating_mode == Operating_Mode.TAKE_PICTURES and self.iters > self.start_snapshots and self.iters % self.snapshot_freq == 0:
+        if self.operating_mode == Operating_Mode.TAKE_PICTURES and self.iters > self.start_snapshots and self.iters % self.snapshot_freq == 0 and (self.vels.linear.x + self.vels.angular.z) > 0 and self.take_pictures:
             self.save_image(self.downsample_image(self.camera_feed, self.image_resize_factor, self.color_converter), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
             if self.iters % 100 == 0:
                 print('image folder has ', len(os.listdir(self.image_save_location)), 'images')
@@ -244,6 +247,9 @@ class Controller:
 
     def store_velocities(self, vels_topic):
         self.vels = vels_topic
+        if vels_topic.linear.z > 0.0:
+            self.take_pictures = not self.take_pictures
+            print('toggled picture taking.')
 
     def save_image(self, image, filename):
         print(' saving image', self.image_save_location + '/' + filename + '.jpg')
