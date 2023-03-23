@@ -4,13 +4,14 @@ from enum import Enum
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Image
 from config import ASSETS_FOLDER
+import cv2
 
 # Constants
 # relative paths (inside ASSETS FOLDER)
 IMAGE_SAVE_FOLDER = 'images/outer_lap/gray_manual_recenter'
 DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/gray_diagonal_driving1'
-OPERATING_MODE = controller.Operating_Mode.TAKE_PICTURES
-COLOR_CONVERTER = None
+OPERATING_MODE = controller.Operating_Mode.MODEL
+COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 LINEAR_SPEED = 0.3645
 ANGULAR_SPEED = 1.21
 

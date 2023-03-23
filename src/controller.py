@@ -110,6 +110,7 @@ class Controller:
             move = Twist() # don't move
             self.state = ControllerState.WAIT_FOR_PEDESTRIAN # state transition ? 
             print(f"state changed to {self.state}")
+            time.sleep(0.1)
         else:
             move = self.convert_action_to_cmd_vel(predicted_action, self.drive_diagonal)
             # print(softmaxes.numpy().tolist())
@@ -182,7 +183,7 @@ class Controller:
     def check_if_at_crosswalk(self):
         Y_exp_of_first_cntr = 600
         Y_exp_of_second_cntr = 410
-        radius_of_tolerance = 50
+        radius_of_tolerance = 40
 
         at_crosswalk_flag = False
         min_red = (0, 200, 170)   # lower end of blue
