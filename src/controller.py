@@ -10,9 +10,12 @@ from enum import Enum
 import tensorflow as tf
 import os
 import time
+import matplotlib.pyplot as plt
 
 
-# Driving Mode
+DEBUG_RED_MASK = True
+DEBUG_SKIN_MASK = True
+SHOW_MODEL_OUTPUTS = True
 
 
 
@@ -101,13 +104,25 @@ class Controller:
 
 
     def RunDriveOuterLoopState(self):
-        predicted_action = np.argmax(self.call_driving_model(self.camera_feed)) 
+        softmaxes = self.call_driving_model(self.camera_feed)
+        predicted_action = np.argmax(softmaxes) 
         if self.check_if_at_crosswalk():
             move = Twist() # don't move
             self.state = ControllerState.WAIT_FOR_PEDESTRIAN # state transition ? 
             print(f"state changed to {self.state}")
         else:
             move = self.convert_action_to_cmd_vel(predicted_action, self.drive_diagonal)
+            # print(softmaxes.numpy().tolist())
+            if self.iters % 10 == 0 and SHOW_MODEL_OUTPUTS:
+                fig = plt.figure()
+                fig.add_subplot(111)
+                plt.bar(['F','L','R'], softmaxes)
+                fig.canvas.draw()
+                data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+                data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+                cv2.imshow('data', data)
+                cv2.waitKey(1)
+
         self.publisher.publish(move)
         return
 
