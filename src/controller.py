@@ -13,7 +13,7 @@ import time
 import matplotlib.pyplot as plt
 
 
-DEBUG_RED_MASK = True
+DEBUG_RED_MASK = False
 DEBUG_SKIN_MASK = True
 SHOW_MODEL_OUTPUTS = True
 
@@ -22,7 +22,7 @@ SHOW_MODEL_OUTPUTS = True
 class Operating_Mode(Enum):
     MANUAL = 1,
     MODEL = 2
-    TAKE_PICTURES = 3
+    TAKE_PICTURES = 3,
 
 class ControllerState(Enum):
     INIT = 4,
@@ -73,13 +73,13 @@ class Controller:
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
         # show video output
-        # self.show_camera_feed(self.camera_feed)
+        self.show_camera_feed(self.camera_feed)
+        # cv2.imshow('video feed', self.downsample_image(self.camera_feed, 2))
+        # cv2.waitKey(1)
 
 
         print('=== state: ', self.state)
         # display 
-        cv2.imshow('video feed', self.downsample_image(self.camera_feed, 2))
-        cv2.waitKey(1)
         
         # Jump to state
         if self.state == ControllerState.INIT:
@@ -104,13 +104,19 @@ class Controller:
 
 
     def RunDriveOuterLoopState(self):
+        SAMPLE = False
         softmaxes = self.call_driving_model(self.camera_feed)
-        predicted_action = np.argmax(softmaxes) 
+        if SAMPLE: # sample
+            print(softmaxes.numpy().tolist())
+            predicted_action = np.random.choice(3, p=(softmaxes/np.sum(softmaxes)), replace=False)
+        else: # take argmax
+            predicted_action = np.argmax(softmaxes) 
+
         if self.check_if_at_crosswalk():
             move = Twist() # don't move
             self.state = ControllerState.WAIT_FOR_PEDESTRIAN # state transition ? 
             print(f"state changed to {self.state}")
-            time.sleep(0.1)
+            time.sleep(0.1) # TODO: Better way to do this ?
         else:
             move = self.convert_action_to_cmd_vel(predicted_action, self.drive_diagonal)
             # print(softmaxes.numpy().tolist())
@@ -170,8 +176,9 @@ class Controller:
                 self.state = ControllerState.DRIVE_OUTER_LOOP
                 print(f'state changed to {self.state}')
 
-        cv2.imshow('mask', self.downsample_image(skin_mask, 2))
-        cv2.waitKey(1)
+        if DEBUG_SKIN_MASK:
+            cv2.imshow('mask', self.downsample_image(skin_mask, 2))
+            cv2.waitKey(1)
 
         # return to drive outer loop
 
@@ -224,8 +231,9 @@ class Controller:
                 at_crosswalk_flag = True
                 print("Reached crosswalk.")
 
-        cv2.imshow('mask', self.downsample_image(red_mask, 2))
-        cv2.waitKey(1)
+        if DEBUG_RED_MASK:
+            cv2.imshow('mask', self.downsample_image(red_mask, 2))
+            cv2.waitKey(1)
 
         return at_crosswalk_flag
 

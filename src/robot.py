@@ -8,10 +8,14 @@ import cv2
 
 # Constants
 # relative paths (inside ASSETS FOLDER)
-IMAGE_SAVE_FOLDER = 'images/outer_lap/gray_manual_recenter'
-DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/gray_diagonal_driving1'
+IMAGE_SAVE_FOLDER = 'images/outer_lap/dirty_driving'
+DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/10000images_1500recentering_500avoidcars/'
 OPERATING_MODE = controller.Operating_Mode.MODEL
+
+# image saving
 COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
+RESIZE_FACTOR = 20
+
 LINEAR_SPEED = 0.3645
 ANGULAR_SPEED = 1.21
 
@@ -26,7 +30,7 @@ robot = controller.Controller(
     image_type=controller.Image_Type.GRAY,
     start_snapshots=100,
     snapshot_freq=2,
-    image_resize_factor=20,
+    image_resize_factor=RESIZE_FACTOR,
     publisher=rospy.Publisher('/R1/cmd_vel', Twist, queue_size=1),
     drive_diagonal=True,
     driving_model_path=ASSETS_FOLDER + DRIVING_MODEL_LOAD_FOLDER,
