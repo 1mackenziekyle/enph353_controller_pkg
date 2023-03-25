@@ -14,30 +14,41 @@ import time
 import matplotlib.pyplot as plt
 
 
-DEBUG_RED_MASK = True
-DEBUG_SKIN_MASK = True
-SHOW_MODEL_OUTPUTS = False
-DAGGER_DRIVING = True
-
 
 
 class Operating_Mode(Enum):
     MANUAL = 1,
     MODEL = 2
     TAKE_PICTURES = 3,
-
+    DAGGER = 4,
 class ControllerState(Enum):
     INIT = 4,
     DRIVE_OUTER_LOOP = 3,
     WAIT_FOR_PEDESTRIAN = 2,
-    MANUAL_DRIVE = 1
-
-# type of input image to model
+    MANUAL_DRIVE = 1,
 class Image_Type(Enum):
     BGR = 1,
     GRAY = 2
 
+# ======================== Configuration
+# ========== Debugging
+DEBUG_RED_MASK = True
+DEBUG_SKIN_MASK = True
+SHOW_MODEL_OUTPUTS = False
 
+# ========== Saving images
+IMAGE_SAVE_FOLDER = 'images/outer_lap/optimize/dagger'
+SNAPSHOT_FREQUENCY = 2 # TODO: CHANGE BACK TO 1
+COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
+RESIZE_FACTOR = 20
+
+# ========== Loading Model
+DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/optimize/dagger4'
+
+# ========== Operating
+OPERATING_MODE = Operating_Mode.MODEL
+LINEAR_SPEED = 0.3645
+ANGULAR_SPEED = 1.21
 
 
 
@@ -46,7 +57,7 @@ class Controller:
     # ========= Initialization =========
 
     def __init__(self, operating_mode, image_save_location, image_type, start_snapshots, snapshot_freq, 
-                 image_resize_factor, cmd_vel_publisher, license_plate_publisher, drive_diagonal, driving_model_path, linear_speed, angular_speed, color_converter):
+                 image_resize_factor, cmd_vel_publisher, license_plate_publisher, driving_model_path, linear_speed, angular_speed, color_converter):
         self.bridge = CvBridge()
         self.iters = 0
         self.vels = Twist()
@@ -58,7 +69,6 @@ class Controller:
         self.image_resize_factor = image_resize_factor
         self.cmd_vel_publisher=cmd_vel_publisher
         self.license_plate_publisher=license_plate_publisher
-        self.drive_diagonal = drive_diagonal
         self.driving_model_path = driving_model_path
         self.linear_speed = linear_speed
         self.angular_speed = angular_speed
@@ -68,25 +78,18 @@ class Controller:
         self.driving_model=None
         self.take_pictures = True
         self.load_model()
-        self.license_plate_publisher.publish(str('Team8,multi21,0,XR58'))
-        
         
     def load_model(self):
         self.driving_model = tf.keras.models.load_model(self.driving_model_path)
 
+    # ===== Time step
 
     def step(self, data):
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
         # show video output
         self.show_camera_feed(self.camera_feed)
-        # cv2.imshow('video feed', self.downsample_image(self.camera_feed, 2))
-        # cv2.waitKey(1)
-
-
         print('=== state: ', self.state)
-        # display 
-        
         # Jump to state
         if self.state == ControllerState.INIT:
             self.RunInitState()
@@ -96,9 +99,10 @@ class Controller:
             self.RunManualDriveState()
         elif self.state == ControllerState.WAIT_FOR_PEDESTRIAN:
             self.RunWaitForPedestrianState()
-
+        # TODO: Remove after Time Trials
         if self.iters == 100:
             self.license_plate_publisher.publish(str('Team8,multi21,-1,XR58'))
+
 
     # ========= States ===============
 
@@ -108,37 +112,23 @@ class Controller:
         if self.operating_mode == Operating_Mode.MODEL:
             self.state = ControllerState.DRIVE_OUTER_LOOP
         # start manual driving if in manual mode
-        elif self.operating_mode == Operating_Mode.MANUAL or self.operating_mode == Operating_Mode.TAKE_PICTURES:
+        elif self.operating_mode == Operating_Mode.MANUAL or self.operating_mode == Operating_Mode.TAKE_PICTURES or self.operating_mode == Operating_Mode.DAGGER:
             self.state = ControllerState.MANUAL_DRIVE
+        self.license_plate_publisher.publish(str('Team8,multi21,0,XR58'))
 
 
     def RunDriveOuterLoopState(self):
-        SAMPLE = False
-        softmaxes = self.call_driving_model(self.camera_feed)
-        if SAMPLE: # sample
-            print(softmaxes.numpy().tolist())
-            predicted_action = np.random.choice(3, p=(softmaxes/np.sum(softmaxes)), replace=False)
-        else: # take argmax
-            predicted_action = np.argmax(softmaxes) 
-
+        # if at crosswalk, switch state
         if self.check_if_at_crosswalk():
             move = Twist() # don't move
             self.state = ControllerState.WAIT_FOR_PEDESTRIAN # state transition ? 
             print(f"state changed to {self.state}")
             time.sleep(0.1) # TODO: Better way to do this ?
+        # else, run model
         else:
-            move = self.convert_action_to_cmd_vel(predicted_action, self.drive_diagonal)
-            # print(softmaxes.numpy().tolist())
-            if self.iters % 10 == 0 and SHOW_MODEL_OUTPUTS:
-                fig = plt.figure()
-                fig.add_subplot(111)
-                plt.bar(['F','L','R'], softmaxes)
-                fig.canvas.draw()
-                data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-                data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-                cv2.imshow('data', data)
-                cv2.waitKey(1)
-
+            softmaxes = self.call_driving_model(self.camera_feed)
+            predicted_action = np.argmax(softmaxes) 
+            move = self.convert_action_to_cmd_vel(predicted_action)
         self.cmd_vel_publisher.publish(move)
         return
 
@@ -146,16 +136,13 @@ class Controller:
     def RunManualDriveState(self):
         print(self.vels)
         print('Take Pictures: ', self.take_pictures)
-        # take pictures if neededs
-        if self.operating_mode == Operating_Mode.TAKE_PICTURES and self.iters > self.start_snapshots and self.iters % self.snapshot_freq == 0 and (self.vels.linear.x + self.vels.angular.z) > 0 and self.take_pictures:
-            if DAGGER_DRIVING:
-                softmaxes = self.call_driving_model(self.camera_feed)
-                predicted_action = np.argmax(softmaxes)
-                human_action = self.convert_cmd_vels_to_action(self.vels.linear.x, self.vels.angular.z) # 0, 1, or 2
-                if predicted_action != human_action:
-                    self.save_image(self.downsample_image(self.camera_feed, self.image_resize_factor, self.color_converter), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
-            else:
-                self.save_image(self.downsample_image(self.camera_feed, self.image_resize_factor, self.color_converter), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
+        if self.operating_mode == Operating_Mode.TAKE_PICTURES: 
+            self.save_labelled_image()
+        elif self.operating_mode == Operating_Mode.DAGGER:
+            human_action = self.convert_cmd_vels_to_action(self.vels.linear.x, self.vels.angular.z)
+            model_action = np.argmax(self.call_driving_model(self.camera_feed))
+            if human_action != model_action:
+                self.save_labelled_image()
         return
 
 
@@ -186,12 +173,12 @@ class Controller:
             for c in skin_cntrs:
                 M = cv2.moments(c)
                 cX = int(M["m10"] / M["m00"])
+            # if pedestrian at center
             if abs(cX- skin_mask.shape[1]//2) < TOL_SKIN:
                 self.state = ControllerState.DRIVE_OUTER_LOOP
-                print(f'state changed to {self.state}')
 
         if DEBUG_SKIN_MASK:
-            cv2.imshow('mask', self.downsample_image(skin_mask, 2))
+            cv2.imshow('Pedestrian Mask', self.downsample_image(skin_mask, 2))
             cv2.waitKey(1)
 
         # return to drive outer loop
@@ -200,10 +187,18 @@ class Controller:
 
 
     # =========== Utilities =============
+    def save_labelled_image(self):
+        if self.iters > self.start_snapshots:
+            if self.iters % self.snapshot_freq == 0 or self.operating_mode == Operating_Mode.DAGGER:
+                if self.vels.linear.x + self.vels.angular.z > 0 and self.take_pictures:
+                    self.save_image(self.downsample_image(self.camera_feed, self.image_resize_factor, self.color_converter), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
 
     def check_if_at_crosswalk(self):
-        Y_exp_of_first_cntr = 600
-        Y_exp_of_second_cntr = 410
+        """
+        Returns True/False of whether robot thinks it is at the crosswalk and should stop.
+        """
+        Y_exp_0 = 650
+        Y_exp_1 = 410
         radius_of_tolerance = 40
 
         at_crosswalk_flag = False
@@ -239,21 +234,26 @@ class Controller:
                 cX = int(M["m10"] / M["m00"])
                 cY = int(M["m01"] / M["m00"])
                 red_centroids.append((cX, cY))
-
             # check if STOP
-            if abs(red_centroids[0][1] - 650) < radius_of_tolerance and abs(red_centroids[1][1] - 410) < radius_of_tolerance:
-                at_crosswalk_flag = True
-                print("Reached crosswalk.")
+            if abs(red_centroids[0][1] - Y_exp_0) < radius_of_tolerance and abs(red_centroids[1][1] - Y_exp_1) < radius_of_tolerance:
+                return True
 
         if DEBUG_RED_MASK:
             red_mask = np.stack([np.zeros_like(red_mask), np.zeros_like(red_mask), red_mask], axis=-1)
-            cv2.imshow('mask', self.downsample_image(red_mask, 2))
+            cv2.imshow('Pedestrian Mask', self.downsample_image(red_mask, 2))
+            cv2.moveWindow('Pedestrian Mask', 850, 100)
             cv2.waitKey(1)
 
-        return at_crosswalk_flag
+        return False
 
 
     def call_driving_model(self, camera_feed):
+        """
+        Forward passes a cv2 camera image through the driving network and returns
+        softmax probabalistic outputs.
+        Ex: (Image of left turning road) ---> [0.2, 0.7, 0.1]
+                                                F    L    R 
+        """
         # downsample
         camera_feed_gray =  self.downsample_image(camera_feed, self.image_resize_factor, color_converter=cv2.COLOR_BGR2GRAY)
         camera_feed_gray = tf.expand_dims(camera_feed_gray, 0) # expand dim 0
@@ -264,21 +264,16 @@ class Controller:
     def convert_image_topic_to_cv_image(self, camera_topic):
         return self.bridge.imgmsg_to_cv2(camera_topic, 'bgr8')
 
-    def convert_action_to_cmd_vel(self, action, drive_diagonal):
+    def convert_action_to_cmd_vel(self, action):
+        """
+        Maps an action (0, 1, or 2) to a Twist() object to publish to ROS network
+        """
         out = Twist()
-        if not drive_diagonal: # drive straight mode
-            if action == 0:
-                out.linear.x = 0.5
-            elif action == 1:
-                out.angular.z = 1.0 
-            else:
-                out.angular.z = -1.0
-        else:
-            out.linear.x = self.linear_speed
-            if action == 1:
-                out.angular.z = self.angular_speed
-            elif action == 2:
-                out.angular.z = -1 * self.angular_speed
+        out.linear.x = self.linear_speed
+        if action == 1:
+            out.angular.z = self.angular_speed
+        elif action == 2:
+            out.angular.z = -1 * self.angular_speed
         return out
 
     def convert_cmd_vels_to_action(self, linear_x, angular_z):
@@ -317,6 +312,7 @@ class Controller:
         raw_camera_feed = self.downsample_image(raw_camera_feed, 2) # downsample by 2
         labelled_video_feed = self.annotate_image(raw_camera_feed)
         cv2.imshow("Camera feed", labelled_video_feed)
+        cv2.moveWindow("Camera feed", 100, 100)
         cv2.waitKey(1)
 
     def annotate_image(self, input_image):
@@ -328,6 +324,14 @@ class Controller:
             fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         cv2.putText(img=out, text="iters: " + str(self.iters), org=(150, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         return out
+
+
+
+def showInMovedWindow(winname, img, x, y):
+    cv2.namedWindow(winname)        # Create a named window
+    cv2.moveWindow(winname, x, y)   # Move it to (x,y)
+    cv2.imshow(winname,img)
+
 
 
 
