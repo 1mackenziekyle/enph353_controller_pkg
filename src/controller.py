@@ -75,22 +75,31 @@ class Controller:
         self.operating_mode = operating_mode
         self.state = ControllerState.INIT
         self.color_converter = color_converter
-        self.driving_model=None
-        self.take_pictures = True
-        self.load_model()
-        
-    def load_model(self):
         self.driving_model = tf.keras.models.load_model(self.driving_model_path)
+        self.take_pictures = True
+
 
     # ===== Time step
 
     def step(self, data):
+        """
+        Enter RunState() for current state
+
+        Update and display camera feed
+
+        (Temporary) Send a message of value -1 to '/license_plate' topic after 100 iterations
+        for time trials
+        """
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
-        # show video output
         self.show_camera_feed(self.camera_feed)
+        if self.iters == 100: # TODO: REMOVE AFTER TIME TRIALS
+            self.license_plate_publisher.publish(str('Team8,multi21,-1,XR58'))
         print('=== state: ', self.state)
         # Jump to state
+        self.RunCurrentState()
+
+    def RunCurrentState(self):
         if self.state == ControllerState.INIT:
             self.RunInitState()
         elif self.state == ControllerState.DRIVE_OUTER_LOOP:
@@ -99,10 +108,6 @@ class Controller:
             self.RunManualDriveState()
         elif self.state == ControllerState.WAIT_FOR_PEDESTRIAN:
             self.RunWaitForPedestrianState()
-        # TODO: Remove after Time Trials
-        if self.iters == 100:
-            self.license_plate_publisher.publish(str('Team8,multi21,-1,XR58'))
-
 
     # ========= States ===============
 
