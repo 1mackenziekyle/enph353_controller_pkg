@@ -1,4 +1,5 @@
 from sensor_msgs.msg import Image
+from std_msgs.msg import String
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Twist
 
@@ -13,9 +14,10 @@ import time
 import matplotlib.pyplot as plt
 
 
-DEBUG_RED_MASK = False
+DEBUG_RED_MASK = True
 DEBUG_SKIN_MASK = True
-SHOW_MODEL_OUTPUTS = True
+SHOW_MODEL_OUTPUTS = False
+DAGGER_DRIVING = True
 
 
 
@@ -44,7 +46,7 @@ class Controller:
     # ========= Initialization =========
 
     def __init__(self, operating_mode, image_save_location, image_type, start_snapshots, snapshot_freq, 
-                 image_resize_factor, publisher, drive_diagonal, driving_model_path, linear_speed, angular_speed, color_converter):
+                 image_resize_factor, cmd_vel_publisher, license_plate_publisher, drive_diagonal, driving_model_path, linear_speed, angular_speed, color_converter):
         self.bridge = CvBridge()
         self.iters = 0
         self.vels = Twist()
@@ -54,7 +56,8 @@ class Controller:
         self.start_snapshots = start_snapshots
         self.snapshot_freq = snapshot_freq
         self.image_resize_factor = image_resize_factor
-        self.publisher=publisher
+        self.cmd_vel_publisher=cmd_vel_publisher
+        self.license_plate_publisher=license_plate_publisher
         self.drive_diagonal = drive_diagonal
         self.driving_model_path = driving_model_path
         self.linear_speed = linear_speed
@@ -64,6 +67,9 @@ class Controller:
         self.color_converter = color_converter
         self.driving_model=None
         self.take_pictures = True
+        self.load_model()
+        self.license_plate_publisher.publish(str('Team8,multi21,0,XR58'))
+        
         
     def load_model(self):
         self.driving_model = tf.keras.models.load_model(self.driving_model_path)
@@ -90,6 +96,9 @@ class Controller:
             self.RunManualDriveState()
         elif self.state == ControllerState.WAIT_FOR_PEDESTRIAN:
             self.RunWaitForPedestrianState()
+
+        if self.iters == 100:
+            self.license_plate_publisher.publish(str('Team8,multi21,-1,XR58'))
 
     # ========= States ===============
 
@@ -130,7 +139,7 @@ class Controller:
                 cv2.imshow('data', data)
                 cv2.waitKey(1)
 
-        self.publisher.publish(move)
+        self.cmd_vel_publisher.publish(move)
         return
 
 
@@ -139,9 +148,14 @@ class Controller:
         print('Take Pictures: ', self.take_pictures)
         # take pictures if neededs
         if self.operating_mode == Operating_Mode.TAKE_PICTURES and self.iters > self.start_snapshots and self.iters % self.snapshot_freq == 0 and (self.vels.linear.x + self.vels.angular.z) > 0 and self.take_pictures:
-            self.save_image(self.downsample_image(self.camera_feed, self.image_resize_factor, self.color_converter), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
-            if self.iters % 100 == 0:
-                print('image folder has ', len(os.listdir(self.image_save_location)), 'images')
+            if DAGGER_DRIVING:
+                softmaxes = self.call_driving_model(self.camera_feed)
+                predicted_action = np.argmax(softmaxes)
+                human_action = self.convert_cmd_vels_to_action(self.vels.linear.x, self.vels.angular.z) # 0, 1, or 2
+                if predicted_action != human_action:
+                    self.save_image(self.downsample_image(self.camera_feed, self.image_resize_factor, self.color_converter), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
+            else:
+                self.save_image(self.downsample_image(self.camera_feed, self.image_resize_factor, self.color_converter), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
         return
 
 
@@ -232,6 +246,7 @@ class Controller:
                 print("Reached crosswalk.")
 
         if DEBUG_RED_MASK:
+            red_mask = np.stack([np.zeros_like(red_mask), np.zeros_like(red_mask), red_mask], axis=-1)
             cv2.imshow('mask', self.downsample_image(red_mask, 2))
             cv2.waitKey(1)
 
@@ -265,6 +280,17 @@ class Controller:
             elif action == 2:
                 out.angular.z = -1 * self.angular_speed
         return out
+
+    def convert_cmd_vels_to_action(self, linear_x, angular_z):
+        """
+        Requires that input is not (0,0) (no action)
+        """
+        if angular_z == 0:
+            return 0
+        elif angular_z > 0:
+            return 1
+        else: 
+            return 2
 
     def read_camera_message(self, msg):
         return self.bridge.imgmsg_to_cv2(msg, 'bgr8')
