@@ -16,8 +16,8 @@ import matplotlib.pyplot as plt
 class Operating_Mode(Enum):
     MANUAL = 1,
     MODEL = 2
-    TAKE_PICTURES = 3,
-    DAGGER = 4,
+    TAKE_PICTURES = 3
+    SADDLE = 4,
 class ControllerState(Enum):
     INIT = 4,
     DRIVE_OUTER_LOOP = 3,
@@ -50,13 +50,13 @@ DEBUG_SKIN_MASK = True
 SHOW_MODEL_OUTPUTS = False
 
 # ========== Saving images
-IMAGE_SAVE_FOLDER = 'images/outer_lap/optimize/dagger'
-SNAPSHOT_FREQUENCY = 2 # TODO: CHANGE BACK TO 1
+IMAGE_SAVE_FOLDER = 'images/outer_lap/saddle'
+SNAPSHOT_FREQUENCY = 2
 COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
 
 # ========== Loading Model
-DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/optimize/dagger4'
+DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/saddle/saddle1'
 
 # ========== Operating
 OPERATING_MODE = Operating_Mode.MODEL
@@ -139,7 +139,7 @@ class Controller:
         if self.operating_mode == Operating_Mode.MODEL:
             self.state = ControllerState.DRIVE_OUTER_LOOP
         # start manual driving if in manual mode
-        elif self.operating_mode == Operating_Mode.MANUAL or self.operating_mode == Operating_Mode.TAKE_PICTURES or self.operating_mode == Operating_Mode.DAGGER:
+        elif self.operating_mode == Operating_Mode.MANUAL or self.operating_mode == Operating_Mode.TAKE_PICTURES or self.operating_mode == Operating_Mode.SADDLE:
             self.state = ControllerState.MANUAL_DRIVE
 
 
@@ -164,7 +164,7 @@ class Controller:
         print('Take Pictures: ', self.take_pictures)
         if self.operating_mode == Operating_Mode.TAKE_PICTURES: 
             self.save_labelled_image()
-        elif self.operating_mode == Operating_Mode.DAGGER:
+        elif self.operating_mode == Operating_Mode.SADDLE:
             human_action = self.convert_cmd_vels_to_action(self.vels.linear.x, self.vels.angular.z)
             model_action = np.argmax(self.call_driving_model(self.camera_feed))
             if human_action != model_action:
@@ -201,7 +201,7 @@ class Controller:
 # ==================== Utility Functions =======================
     def save_labelled_image(self):
         if self.iters > self.start_snapshots:
-            if self.iters % self.snapshot_freq == 0 or self.operating_mode == Operating_Mode.DAGGER:
+            if self.iters % self.snapshot_freq == 0:
                 if self.vels.linear.x + self.vels.angular.z > 0 and self.take_pictures:
                     self.save_image(self.downsample_image(self.camera_feed, self.image_resize_factor, self.color_converter), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
 
@@ -238,7 +238,7 @@ class Controller:
         if DEBUG_RED_MASK:
             red_mask = np.stack([np.zeros_like(red_mask), np.zeros_like(red_mask), red_mask], axis=-1)
             cv2.imshow('Pedestrian Mask', self.downsample_image(red_mask, 2))
-            cv2.moveWindow('Pedestrian Mask', 850, 100)
+            cv2.moveWindow('Pedestrian Mask', 100, 500)
             cv2.waitKey(1)
         return False
 
@@ -335,6 +335,7 @@ class Controller:
             cv2.putText(img=out, text=velocity_attributes_and_values[i], org=(20,20+40*i), 
             fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         cv2.putText(img=out, text="iters: " + str(self.iters), org=(150, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
+        cv2.putText(img=out, text="Mode: " + str(self.operating_mode.name), org=(450, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         return out
 
 

@@ -19,7 +19,7 @@ robot = controller.Controller(
     operating_mode=controller.OPERATING_MODE,
     image_save_location=ASSETS_FOLDER + controller.IMAGE_SAVE_FOLDER,
     image_type=controller.Image_Type.GRAY,
-    start_snapshots=100,
+    start_snapshots=20,
     snapshot_freq=controller.SNAPSHOT_FREQUENCY,
     image_resize_factor=controller.RESIZE_FACTOR,
     cmd_vel_publisher=rospy.Publisher('/R1/cmd_vel', Twist, queue_size=1),
