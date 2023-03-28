@@ -53,13 +53,13 @@ DEBUG_SKIN_MASK = True
 SHOW_MODEL_OUTPUTS = False
 
 # ========== Saving images
-IMAGE_SAVE_FOLDER = 'images/outer_lap/saddle'
+IMAGE_SAVE_FOLDER = 'images/outer_lap/center10000'
 SNAPSHOT_FREQUENCY = 2
 COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
 
 # ========== Loading Model
-DRIVING_MODEL_LOAD_FOLDER = 'models/uter_lap/5convlayers/saddle/saddle0'
+DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/mediumsize/dagger6/'
 
 # ========== Operating
 OPERATING_MODE = Operating_Mode.TAKE_PICTURES
@@ -258,6 +258,7 @@ class Controller:
         camera_feed_gray = tf.expand_dims(camera_feed_gray, 0) # expand batch dim = 1
         softmaxes = tf.squeeze(self.driving_model(camera_feed_gray),0) # Squeeze output shape: (1, N) --> (N)
         return softmaxes
+ 
 
     
     def convert_image_topic_to_cv_image(self, camera_topic):
