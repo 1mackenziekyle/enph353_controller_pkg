@@ -27,6 +27,9 @@ class Image_Type(Enum):
     BGR = 1,
     GRAY = 2
 
+
+
+
 """
 Notes for use: 
 
@@ -56,10 +59,10 @@ COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
 
 # ========== Loading Model
-DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/saddle/saddle1'
+DRIVING_MODEL_LOAD_FOLDER = 'models/uter_lap/5convlayers/saddle/saddle0'
 
 # ========== Operating
-OPERATING_MODE = Operating_Mode.MODEL
+OPERATING_MODE = Operating_Mode.TAKE_PICTURES
 LINEAR_SPEED = 0.3645
 ANGULAR_SPEED = 1.21
 
@@ -238,7 +241,7 @@ class Controller:
         if DEBUG_RED_MASK:
             red_mask = np.stack([np.zeros_like(red_mask), np.zeros_like(red_mask), red_mask], axis=-1)
             cv2.imshow('Pedestrian Mask', self.downsample_image(red_mask, 2))
-            cv2.moveWindow('Pedestrian Mask', 100, 500)
+            cv2.moveWindow('Pedestrian Mask', 10, 500)
             cv2.waitKey(1)
         return False
 
@@ -322,7 +325,7 @@ class Controller:
         raw_camera_feed = self.downsample_image(raw_camera_feed, 2) # downsample by 2
         labelled_video_feed = self.annotate_image(raw_camera_feed)
         cv2.imshow("Camera feed", labelled_video_feed)
-        cv2.moveWindow("Camera feed", 100, 100)
+        cv2.moveWindow("Camera feed", 10, 100)
         cv2.waitKey(1)
 
 
@@ -337,15 +340,3 @@ class Controller:
         cv2.putText(img=out, text="iters: " + str(self.iters), org=(150, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         cv2.putText(img=out, text="Mode: " + str(self.operating_mode.name), org=(450, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         return out
-
-
-
-def showInMovedWindow(winname, img, x, y):
-    cv2.namedWindow(winname)        # Create a named window
-    cv2.moveWindow(winname, x, y)   # Move it to (x,y)
-    cv2.imshow(winname,img)
-
-
-
-
-
