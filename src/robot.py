@@ -2,17 +2,13 @@ import controller
 import rospy
 from enum import Enum
 from geometry_msgs.msg import Twist
+from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from config import ASSETS_FOLDER
+import cv2
 
 # Constants
 # relative paths (inside ASSETS FOLDER)
-IMAGE_SAVE_FOLDER = 'images/outer_lap/gray_manual_recenter'
-DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/gray_diagonal_driving1'
-OPERATING_MODE = controller.Operating_Mode.MODEL
-COLOR_CONVERTER = None
-LINEAR_SPEED = 0.3645
-ANGULAR_SPEED = 1.21
 
 
 # init ros node
@@ -20,23 +16,19 @@ rospy.init_node('robot', anonymous=True)
 
 # initialize controller object
 robot = controller.Controller(
-    operating_mode=OPERATING_MODE,
-    image_save_location=ASSETS_FOLDER + IMAGE_SAVE_FOLDER,
+    operating_mode=controller.OPERATING_MODE,
+    image_save_location=ASSETS_FOLDER + controller.IMAGE_SAVE_FOLDER,
     image_type=controller.Image_Type.GRAY,
-    start_snapshots=100,
-    snapshot_freq=2,
-    image_resize_factor=20,
-    publisher=rospy.Publisher('/R1/cmd_vel', Twist, queue_size=1),
-    drive_diagonal=True,
-    driving_model_path=ASSETS_FOLDER + DRIVING_MODEL_LOAD_FOLDER,
-    linear_speed=LINEAR_SPEED,
-    angular_speed=ANGULAR_SPEED,
-    color_converter=COLOR_CONVERTER
+    start_snapshots=20,
+    snapshot_freq=controller.SNAPSHOT_FREQUENCY,
+    image_resize_factor=controller.RESIZE_FACTOR,
+    cmd_vel_publisher=rospy.Publisher('/R1/cmd_vel', Twist, queue_size=1),
+    license_plate_publisher=rospy.Publisher('/license_plate', String, queue_size=1),
+    driving_model_path=ASSETS_FOLDER + controller.DRIVING_MODEL_LOAD_FOLDER,
+    linear_speed=controller.LINEAR_SPEED,
+    angular_speed=controller.ANGULAR_SPEED,
+    color_converter=controller.COLOR_CONVERTER
     )
-
-# load model if in model mode
-if robot.operating_mode is controller.Operating_Mode.MODEL:
-    robot.load_model()
 
 # set up subscribers
 rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=robot.step)
