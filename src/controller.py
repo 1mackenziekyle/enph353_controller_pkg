@@ -53,16 +53,16 @@ DEBUG_SKIN_MASK = True
 SHOW_MODEL_OUTPUTS = False
 
 # ========== Saving images
-IMAGE_SAVE_FOLDER = 'images/outer_lap/center10000'
+IMAGE_SAVE_FOLDER = 'images/outer_lap/final/saddle6'
 SNAPSHOT_FREQUENCY = 2
 COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
 
 # ========== Loading Model
-DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/mediumsize/dagger6/'
+DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/final/saddle6'
 
 # ========== Operating
-OPERATING_MODE = Operating_Mode.TAKE_PICTURES
+OPERATING_MODE = Operating_Mode.MODEL
 LINEAR_SPEED = 0.3645
 ANGULAR_SPEED = 1.21
 
@@ -93,7 +93,8 @@ class Controller:
         self.operating_mode = operating_mode
         self.state = ControllerState.INIT
         self.color_converter = color_converter
-        self.driving_model = tf.keras.models.load_model(self.driving_model_path)
+        if self.operating_mode is not Operating_Mode.TAKE_PICTURES:
+            self.driving_model = tf.keras.models.load_model(self.driving_model_path)
         self.take_pictures = True
 
 
@@ -172,6 +173,8 @@ class Controller:
             model_action = np.argmax(self.call_driving_model(self.camera_feed))
             if human_action != model_action:
                 self.save_labelled_image()
+        else:
+            self.show_mask()
         return
 
 
@@ -202,10 +205,29 @@ class Controller:
 
 
 # ==================== Utility Functions =======================
+    def show_mask(self):
+        hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
+        min_blue_text = np.asarray([115, 150, 80])
+        max_blue_text = np.asarray([215, 200, 120])
+        min_black = np.asarray([0, 0, 0])
+        max_black = np.asarray([0, 0, 20])
+        min_license_gray = np.asarray([100, 0, 85])
+        max_license_gray = np.asarray([120, 10, 95])
+        mask_blue = cv2.inRange(hsv_feed, min_blue_text, max_blue_text)
+        mask_black = cv2.inRange(hsv_feed, min_black, max_black)
+        mask_license_gray = cv2.inRange(hsv_feed, min_license_gray, max_license_gray)
+        cv2.imshow('Debugging HSV', self.downsample_image(hsv_feed, 2))
+        cv2.imshow('Debugging Mask', np.stack([mask_blue, mask_license_gray, mask_black], axis=-1))
+        # cv2.moveWindow('Debugging Mask', 1250,/)
+        cv2.waitKey(1)    
+
+
+
+
     def save_labelled_image(self):
         if self.iters > self.start_snapshots:
             if self.iters % self.snapshot_freq == 0:
-                if self.vels.linear.x + self.vels.angular.z > 0 and self.take_pictures:
+                if abs(self.vels.linear.x + self.vels.angular.z) > 0 and self.vels.linear.x >= 0 and self.take_pictures:
                     self.save_image(self.downsample_image(self.camera_feed, self.image_resize_factor, self.color_converter), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
 
     def check_if_at_crosswalk(self):
