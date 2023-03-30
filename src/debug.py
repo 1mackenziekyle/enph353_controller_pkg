@@ -44,6 +44,7 @@ def display_debug_window(image):
     # show image
     cv2.imshow('debug', cv2.resize(hsv_feed, (hsv_feed.shape[1]//2, hsv_feed.shape[0]//2)))
     cv2.waitKey(1)
+    
 
 # set up subscribers
 rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=display_debug_window)

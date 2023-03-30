@@ -87,14 +87,14 @@ class Controller:
         self.image_resize_factor = image_resize_factor
         self.cmd_vel_publisher=cmd_vel_publisher
         self.license_plate_publisher=license_plate_publisher
-        self.driving_model_path = driving_model_path
+        self.outer_loop_driving_model_path = driving_model_path
         self.linear_speed = linear_speed
         self.angular_speed = angular_speed
         self.operating_mode = operating_mode
         self.state = ControllerState.INIT
         self.color_converter = color_converter
         if self.operating_mode is not Operating_Mode.TAKE_PICTURES:
-            self.driving_model = tf.keras.models.load_model(self.driving_model_path)
+            self.outer_loop_driving_model = tf.keras.models.load_model(self.outer_loop_driving_model_path)
         self.take_pictures = True
 
 
@@ -156,11 +156,22 @@ class Controller:
             print(f"state changed to {self.state}")
             time.sleep(0.1) # TODO: Better way to do this ?
         else:
-            softmaxes = self.call_driving_model(self.camera_feed)
+            softmaxes = self.call_outer_loop_driving_model(self.camera_feed)
             predicted_action = np.argmax(softmaxes) 
             move = self.convert_action_to_cmd_vel(predicted_action)
         self.cmd_vel_publisher.publish(move)
         return
+
+    
+
+    def RunDriveInnerLoopState(self):
+        self.vels.linear.x = 0.25        # Drive slow homie
+        softmaxes = self.call_inner_loop_driving_model(self.camera_feed)
+        predicted_action = np.argmax(softmaxes)
+        move = self.convert_action_to_cmd_vel(predicted_action)
+        self.cmd_vel_publisher.publish(move)
+        return
+
 
 
 
@@ -171,7 +182,7 @@ class Controller:
             self.save_labelled_image()
         elif self.operating_mode == Operating_Mode.SADDLE:
             human_action = self.convert_cmd_vels_to_action(self.vels.linear.x, self.vels.angular.z)
-            model_action = np.argmax(self.call_driving_model(self.camera_feed))
+            model_action = np.argmax(self.call_driving_model(self.camera_feed, use_outer_loop_model=False))
             if human_action != model_action:
                 self.save_labelled_image()
         return
@@ -249,7 +260,7 @@ class Controller:
 
 
 
-    def call_driving_model(self, camera_feed):
+    def call_outer_loop_driving_model(self, camera_feed):
         """
         Forward passes a cv2 camera image through the driving network and returns
         softmax probabalistic outputs.
@@ -258,9 +269,23 @@ class Controller:
         """
         camera_feed_gray =  self.downsample_image(camera_feed, self.image_resize_factor, color_converter=cv2.COLOR_BGR2GRAY) # downsample
         camera_feed_gray = tf.expand_dims(camera_feed_gray, 0) # expand batch dim = 1
-        softmaxes = tf.squeeze(self.driving_model(camera_feed_gray),0) # Squeeze output shape: (1, N) --> (N)
+        softmaxes = tf.squeeze(self.outer_loop_driving_model(camera_feed_gray),0) # Squeeze output shape: (1, N) --> (N)
         return softmaxes
  
+
+
+    def call_inner_loop_driving_model(self, camera_feed):
+        """
+        Forward passes a cv2 camera image through the driving network and returns
+        softmax probabalistic outputs.
+        Ex: (Image of left turning road) ---> [0.2, 0.7, 0.1]
+                                                F    L    R 
+        """
+        camera_feed_gray =  self.downsample_image(camera_feed, self.image_resize_factor, color_converter=cv2.COLOR_BGR2GRAY) # downsample
+        camera_feed_gray = tf.expand_dims(camera_feed_gray, 0) # expand batch dim = 1
+        softmaxes = tf.squeeze(self.inner_loop_driving_model(camera_feed_gray),0) # Squeeze output shape: (1, N) --> (N)
+        return softmaxes
+
 
     
     def convert_image_topic_to_cv_image(self, camera_topic):
