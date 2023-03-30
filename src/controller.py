@@ -62,7 +62,7 @@ RESIZE_FACTOR = 20
 DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/final/saddle6'
 
 # ========== Operating
-OPERATING_MODE = Operating_Mode.MODEL
+OPERATING_MODE = Operating_Mode.MANUAL
 LINEAR_SPEED = 0.3645
 ANGULAR_SPEED = 1.21
 
@@ -139,6 +139,7 @@ class Controller:
         Start the competition timer and enter either 
         the model-driving state or self-driving state 
         """
+        time.sleep(1) # wait 1 second for ros to initialize completely
         self.license_plate_publisher.publish(str('Team8,multi21,0,XR58'))
         if self.operating_mode == Operating_Mode.MODEL:
             self.state = ControllerState.DRIVE_OUTER_LOOP
