@@ -41,6 +41,14 @@ Where {X} is the current state.
 """
 
 
+"""
+Questions for Miti:
+
+1. How should we make a controller package with an existing python file?
+2. Can we use other python libraries (keyboard listener?)
+
+"""
+
 
 
 # ======================== Configuration
