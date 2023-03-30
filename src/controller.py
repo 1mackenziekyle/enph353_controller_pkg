@@ -15,17 +15,16 @@ import matplotlib.pyplot as plt
 
 class Operating_Mode(Enum):
     MANUAL = 1,
-    MODEL = 2
-    TAKE_PICTURES = 3
+    MODEL = 2,
+    TAKE_PICTURES = 3,
     SADDLE = 4,
+    TAKE_PICTURES_LISENCE = 5
+
 class ControllerState(Enum):
     INIT = 4,
     DRIVE_OUTER_LOOP = 3,
     WAIT_FOR_PEDESTRIAN = 2,
     MANUAL_DRIVE = 1,
-class Image_Type(Enum):
-    BGR = 1,
-    GRAY = 2
 
 
 
@@ -51,15 +50,16 @@ Where {X} is the current state.
 DEBUG_RED_MASK = True
 DEBUG_SKIN_MASK = True
 SHOW_MODEL_OUTPUTS = False
-
+DEBUG_HSV_OUTPUT = True
+DEBUG_LISENCE_MASK = True 
 # ========== Saving images
-IMAGE_SAVE_FOLDER = 'images/outer_lap/saddle'
+IMAGE_SAVE_FOLDER = 'images/outer_lap/Liscence_plate'
 SNAPSHOT_FREQUENCY = 2
-COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
-RESIZE_FACTOR = 20
+COLOR_CONVERTER = None
+RESIZE_FACTOR = 1
 
 # ========== Loading Model
-DRIVING_MODEL_LOAD_FOLDER = 'models/uter_lap/5convlayers/saddle/saddle0'
+DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/saddle/saddle0'
 
 # ========== Operating
 OPERATING_MODE = Operating_Mode.TAKE_PICTURES
@@ -71,7 +71,7 @@ ANGULAR_SPEED = 1.21
 
 
 class Controller:
-    def __init__(self, operating_mode, image_save_location, image_type, start_snapshots, snapshot_freq, 
+    def __init__(self, operating_mode, image_save_location, start_snapshots, snapshot_freq, 
                  image_resize_factor, cmd_vel_publisher, license_plate_publisher, driving_model_path, linear_speed, angular_speed, color_converter):
         """
         Initialize variables and load model for Controller object.
@@ -81,7 +81,6 @@ class Controller:
         self.vels = Twist()
         self.camera_feed = None
         self.image_save_location=image_save_location
-        self.image_type = image_type
         self.start_snapshots = start_snapshots
         self.snapshot_freq = snapshot_freq
         self.image_resize_factor = image_resize_factor
@@ -165,13 +164,25 @@ class Controller:
     def RunManualDriveState(self):
         print(self.vels)
         print('Take Pictures: ', self.take_pictures)
+        hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
         if self.operating_mode == Operating_Mode.TAKE_PICTURES: 
             self.save_labelled_image()
+        elif self.operating_mode == Operating_Mode.TAKE_PICTURES_LISENCE:
+            self.save_labelled_image_lisence()
         elif self.operating_mode == Operating_Mode.SADDLE:
             human_action = self.convert_cmd_vels_to_action(self.vels.linear.x, self.vels.angular.z)
             model_action = np.argmax(self.call_driving_model(self.camera_feed))
             if human_action != model_action:
                 self.save_labelled_image()
+        if DEBUG_HSV_OUTPUT:
+            cv2.imshow('HSV Image', self.downsample_image(hsv_feed, 2))
+            cv2.moveWindow('HSV Image', 10, 500)
+            cv2.waitKey(1)
+        if DEBUG_LISENCE_MASK:
+            min_grey = (0, 0, 97)
+            max_grey = (0,0, 104)
+            lisence_mask = cv2.inRange(hsv_feed, min_grey, max_grey)
+             
         return
 
 
@@ -202,6 +213,12 @@ class Controller:
 
 
 # ==================== Utility Functions =======================
+    def self_labelled_image_lisence(self):
+        if self.iters > self.start_snapshots:
+            if self.iters % self.snapshot_freq == 0:
+                if self.take_pictures:
+                    self.save_image(self.downsample_image(self.camera_feed, self.image_resize_factor, self.color_converter), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
+
     def save_labelled_image(self):
         if self.iters > self.start_snapshots:
             if self.iters % self.snapshot_freq == 0:
