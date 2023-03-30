@@ -47,8 +47,8 @@ Where {X} is the current state.
 
 # ======================== Configuration
 # ========== Debugging
-DEBUG_RED_MASK = True
-DEBUG_SKIN_MASK = True
+DEBUG_RED_MASK = False
+DEBUG_SKIN_MASK = False
 SHOW_MODEL_OUTPUTS = False
 DEBUG_HSV_OUTPUT = True
 DEBUG_LISENCE_MASK = True 
@@ -59,7 +59,7 @@ COLOR_CONVERTER = None
 RESIZE_FACTOR = 1
 
 # ========== Loading Model
-DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/final/saddle6'
+DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/saddle/saddle0'
 
 # ========== Operating
 OPERATING_MODE = Operating_Mode.MANUAL
@@ -94,7 +94,7 @@ class Controller:
         self.color_converter = color_converter
         if self.operating_mode is not Operating_Mode.TAKE_PICTURES:
             self.driving_model = tf.keras.models.load_model(self.driving_model_path)
-        self.take_pictures = True
+        self.take_pictures = False
 
 
 
@@ -182,8 +182,17 @@ class Controller:
             cv2.waitKey(1)
         if DEBUG_LISENCE_MASK:
             min_grey = (0, 0, 97)
-            max_grey = (0,0, 104)
+            max_grey = (0,0, 200)
             lisence_mask = cv2.inRange(hsv_feed, min_grey, max_grey)
+            lisence_contours, lisence_heierarchy = cv2.findContours(image=lisence_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
+            lisence_contours_sorted = sorted(lisence_contours, key = lambda x : cv2.contourArea(x)) # sort by area
+            x,y,w,h = cv2.boundingRect(lisence_contours_sorted[-1])
+            lisence_mask_stacked = np.stack([lisence_mask, lisence_mask, lisence_mask], axis=-1)
+            cv2.rectangle(lisence_mask_stacked,(x,y),(x+w,y+h),(0,0,255),2) 
+            cv2.imshow('Lisence Mask', self.downsample_image(lisence_mask_stacked,2))
+            #cv2.moveWindow('Lisence Mask', 10, 500)
+            cv2.waitKey(1)
+
              
         return
 
