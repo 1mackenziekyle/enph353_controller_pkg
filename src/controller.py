@@ -173,8 +173,6 @@ class Controller:
             model_action = np.argmax(self.call_driving_model(self.camera_feed))
             if human_action != model_action:
                 self.save_labelled_image()
-        else:
-            self.show_mask()
         return
 
 
@@ -205,25 +203,6 @@ class Controller:
 
 
 # ==================== Utility Functions =======================
-    def show_mask(self):
-        hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
-        min_blue_text = np.asarray([115, 150, 80])
-        max_blue_text = np.asarray([215, 200, 120])
-        min_black = np.asarray([0, 0, 0])
-        max_black = np.asarray([0, 0, 20])
-        min_license_gray = np.asarray([100, 0, 85])
-        max_license_gray = np.asarray([120, 10, 95])
-        mask_blue = cv2.inRange(hsv_feed, min_blue_text, max_blue_text)
-        mask_black = cv2.inRange(hsv_feed, min_black, max_black)
-        mask_license_gray = cv2.inRange(hsv_feed, min_license_gray, max_license_gray)
-        cv2.imshow('Debugging HSV', self.downsample_image(hsv_feed, 2))
-        cv2.imshow('Debugging Mask', np.stack([mask_blue, mask_license_gray, mask_black], axis=-1))
-        # cv2.moveWindow('Debugging Mask', 1250,/)
-        cv2.waitKey(1)    
-
-
-
-
     def save_labelled_image(self):
         if self.iters > self.start_snapshots:
             if self.iters % self.snapshot_freq == 0:
