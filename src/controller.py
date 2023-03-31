@@ -19,10 +19,12 @@ class Operating_Mode(Enum):
     TAKE_PICTURES = 3
     SADDLE = 4,
 class ControllerState(Enum):
-    INIT = 4,
-    DRIVE_OUTER_LOOP = 3,
-    WAIT_FOR_PEDESTRIAN = 2,
-    MANUAL_DRIVE = 1,
+    INIT = 1,
+    DRIVE_OUTER_LOOP = 2,
+    DRIVE_INNER_LOOP = 3,
+    WAIT_FOR_PEDESTRIAN = 4,
+    WAIT_FOR_TRUCK = 5,
+    MANUAL_DRIVE = 6,
 class Image_Type(Enum):
     BGR = 1,
     GRAY = 2
@@ -53,26 +55,30 @@ DEBUG_SKIN_MASK = True
 SHOW_MODEL_OUTPUTS = False
 
 # ========== Saving images
-IMAGE_SAVE_FOLDER = 'images/inner_lap/first5k'
+IMAGE_SAVE_FOLDER = 'images/inner_lap/first/saddle1'
 SNAPSHOT_FREQUENCY = 2
 COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
 
-# ========== Loading Model
-DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/final/saddle6'
+# ========== Operating 
+OPERATING_MODE = Operating_Mode.SADDLE
+TEST_INNER_LOOP = True
 
-# ========== Operating
-OPERATING_MODE = Operating_Mode.TAKE_PICTURES
-LINEAR_SPEED = 0.3645
-ANGULAR_SPEED = 1.21
-
-
+# ========== Model Settings
+OUTER_LOOP_LINEAR_SPEED = 0.3645
+OUTER_LOOP_ANGULAR_SPEED = 1.21
+INNER_LOOP_LINEAR_SPEED = 0.25
+INNER_LOOP_ANGULAR_SPEED = 1.0
+OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/final/saddle6'
+INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first5k'
 
 
 
 class Controller:
     def __init__(self, operating_mode, image_save_location, image_type, start_snapshots, snapshot_freq, 
-                 image_resize_factor, cmd_vel_publisher, license_plate_publisher, driving_model_path, linear_speed, angular_speed, color_converter):
+                 image_resize_factor, cmd_vel_publisher, license_plate_publisher, outer_loop_driving_model_path, 
+                 inner_loop_driving_model_path, outer_loop_linear_speed, outer_loop_angular_speed, inner_loop_linear_speed, 
+                 inner_loop_angular_speed, color_converter):
         """
         Initialize variables and load model for Controller object.
         """
@@ -87,15 +93,20 @@ class Controller:
         self.image_resize_factor = image_resize_factor
         self.cmd_vel_publisher=cmd_vel_publisher
         self.license_plate_publisher=license_plate_publisher
-        self.outer_loop_driving_model_path = driving_model_path
-        self.linear_speed = linear_speed
-        self.angular_speed = angular_speed
+        self.outer_loop_driving_model_path = outer_loop_driving_model_path
+        self.inner_loop_driving_model_path = inner_loop_driving_model_path
+        self.outer_loop_linear_speed = outer_loop_linear_speed
+        self.outer_loop_angular_speed = outer_loop_angular_speed
+        self.inner_loop_linear_speed = inner_loop_linear_speed
+        self.inner_loop_angular_speed = inner_loop_angular_speed
         self.operating_mode = operating_mode
         self.state = ControllerState.INIT
         self.color_converter = color_converter
         if self.operating_mode is not Operating_Mode.TAKE_PICTURES:
             self.outer_loop_driving_model = tf.keras.models.load_model(self.outer_loop_driving_model_path)
+            self.inner_loop_driving_model = tf.keras.models.load_model(self.inner_loop_driving_model_path)
         self.take_pictures = True
+        self.truck_passed = False
 
 
 
@@ -127,10 +138,14 @@ class Controller:
             self.RunInitState()
         elif self.state == ControllerState.DRIVE_OUTER_LOOP:
             self.RunDriveOuterLoopState()
+        elif self.state == ControllerState.DRIVE_INNER_LOOP:
+            self.RunDriveInnerLoopState()
         elif self.state == ControllerState.MANUAL_DRIVE:
             self.RunManualDriveState()
         elif self.state == ControllerState.WAIT_FOR_PEDESTRIAN:
             self.RunWaitForPedestrianState()
+        elif self.state == ControllerState.WAIT_FOR_TRUCK:
+            self.RunWaitForTruckState()
 
 
 
@@ -142,7 +157,10 @@ class Controller:
         time.sleep(1) # wait 1 second for ros to initialize completely
         self.license_plate_publisher.publish(str('Team8,multi21,0,XR58'))
         if self.operating_mode == Operating_Mode.MODEL:
-            self.state = ControllerState.DRIVE_OUTER_LOOP
+            if TEST_INNER_LOOP:
+                self.state = ControllerState.DRIVE_INNER_LOOP
+            else:
+                self.state = ControllerState.DRIVE_OUTER_LOOP
         # start manual driving if in manual mode
         elif self.operating_mode == Operating_Mode.MANUAL or self.operating_mode == Operating_Mode.TAKE_PICTURES or self.operating_mode == Operating_Mode.SADDLE:
             self.state = ControllerState.MANUAL_DRIVE
@@ -165,7 +183,25 @@ class Controller:
     
 
     def RunDriveInnerLoopState(self):
-        self.vels.linear.x = 0.25        # Drive slow homie
+        # chech for truck
+        if not self.truck_passed:
+            hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
+            min_road = (0, 0, 70)
+            max_road = (10, 10, 90)
+            mask = cv2.inRange(hsv_feed, min_road, max_road)
+            h = mask.shape[0]
+            mask[:6*h//10, :] = 0 # zero out top 3/4 
+            mask[7*h//10:, :] = 0 # zero out bottom 1/4
+            contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            if len(contours) > 0:
+                totalArea = sum([cv2.contourArea(contour) for contour in contours])
+                cv2.imshow('Hazard Detection', self.downsample_image(mask, 2))
+                # cv2.putText(mask, 'max area: ' + str(totalArea // 1000) + 'k', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+                if totalArea > 80000:
+                    # cv2.putText(mask, 'STOP', (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 5, (0, 0, 255), 20, cv2.LINE_AA)
+                    self.state = ControllerState.WAIT_FOR_TRUCK
+                    self.cmd_vel_publisher.publish(Twist()) # Stop moving
+                    return
         softmaxes = self.call_inner_loop_driving_model(self.camera_feed)
         predicted_action = np.argmax(softmaxes)
         move = self.convert_action_to_cmd_vel(predicted_action)
@@ -182,7 +218,7 @@ class Controller:
             self.save_labelled_image()
         elif self.operating_mode == Operating_Mode.SADDLE:
             human_action = self.convert_cmd_vels_to_action(self.vels.linear.x, self.vels.angular.z)
-            model_action = np.argmax(self.call_driving_model(self.camera_feed, use_outer_loop_model=False))
+            model_action = np.argmax(self.call_outer_loop_driving_model(self.camera_feed))
             if human_action != model_action:
                 self.save_labelled_image()
         return
@@ -190,7 +226,7 @@ class Controller:
 
     
     def RunWaitForPedestrianState(self):
-        TOL_SKIN = 30
+        TOL_SKIN_X = 30
         min_skin =(5,60,60)
         max_skin = (12,90,90)
         hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
@@ -206,11 +242,32 @@ class Controller:
             for c in skin_cntrs:
                 M = cv2.moments(c)
                 cX = int(M["m10"] / M["m00"])
-            if abs(cX- skin_mask.shape[1]//2) < TOL_SKIN:
+            if abs(cX- skin_mask.shape[1]//2) < TOL_SKIN_X:
                 self.state = ControllerState.DRIVE_OUTER_LOOP
         if DEBUG_SKIN_MASK:
-            cv2.imshow('Pedestrian Mask', self.downsample_image(skin_mask, 2))
+            cv2.imshow('Hazard Detection', self.downsample_image(skin_mask, 2))
             cv2.waitKey(1)
+
+
+
+    def RunWaitForTruckState(self):
+        TOL_TRUCK_X = 30
+        hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
+        min_headlight = (0, 190, 30)
+        max_headlight = (10, 210, 50)
+        headlight_mask = cv2.inRange(hsv_feed, min_headlight, max_headlight)
+        contours, hierarchy = cv2.findContours(headlight_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        if len(contours) > 0:
+            contours = [c for c in contours if cv2.contourArea(c) > 5]
+            if len(contours) > 0:
+                moments = cv2.moments(max(contours, key=cv2.contourArea))
+                cX = int(moments["m10"] / moments["m00"])
+                if abs(cX - headlight_mask.shape[1]//3) < TOL_TRUCK_X:
+                    self.state = ControllerState.DRIVE_INNER_LOOP
+                    self.truck_passed = True
+                    time.sleep(1) # wait 0.2 seconds for truck to pass
+        cv2.imshow("Hazard Detection", self.downsample_image(headlight_mask, 2))
+        return
 
 
 
@@ -253,8 +310,8 @@ class Controller:
                 return True # exit WaitForPedestrian and resume driving
         if DEBUG_RED_MASK:
             red_mask = np.stack([np.zeros_like(red_mask), np.zeros_like(red_mask), red_mask], axis=-1)
-            cv2.imshow('Pedestrian Mask', self.downsample_image(red_mask, 2))
-            cv2.moveWindow('Pedestrian Mask', 10, 500)
+            cv2.imshow('Hazard Detection', self.downsample_image(red_mask, 2))
+            cv2.moveWindow('Hazard Detection', 10, 500)
             cv2.waitKey(1)
         return False
 
@@ -297,12 +354,21 @@ class Controller:
         """
         Maps an action (0, 1, or 2) to a Twist() object to publish to ROS network
         """
+        if self.state == ControllerState.DRIVE_OUTER_LOOP:
+            linspeed = self.outer_loop_linear_speed
+            angspeed = self.outer_loop_angular_speed
+        elif self.state == ControllerState.DRIVE_INNER_LOOP:
+            linspeed = self.inner_loop_linear_speed
+            angspeed = self.inner_loop_angular_speed
+        else:
+            print("Error: Not in a model driving state.")
+        
         out = Twist()
-        out.linear.x = self.linear_speed
+        out.linear.x = linspeed 
         if action == 1:
-            out.angular.z = self.angular_speed
+            out.angular.z = angspeed
         elif action == 2:
-            out.angular.z = -1 * self.angular_speed
+            out.angular.z = -1 * angspeed
         return out
 
 
