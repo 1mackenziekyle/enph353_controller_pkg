@@ -22,27 +22,14 @@ def display_debug_window(image):
 
     hsv_feed = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
 
-    gray_min = (0, 0, 90)
-    gray_max = (255, 10, 130)
+    min_road = (0, 0, 70)
+    max_road = (10, 10, 90)
 
-    gray_mask = cv2.inRange(hsv_feed, gray_min, gray_max)
+    mask = cv2.inRange(hsv_feed, min_road, max_road)
 
-    contours, hierarchy = cv2.findContours(gray_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-
-    # find max contour
-    if len(contours) != 0:
-        # draw in blue the contours that were founded
-        
-        cv2.drawContours(hsv_feed, contours, -1, 255, 3)
-
-        # find the biggest countour (c) by the area
-        c = max(contours, key = cv2.contourArea)
-        x,y,w,h = cv2.boundingRect(c)
-
-        # draw the biggest contour (c) in green
-        cv2.rectangle(hsv_feed,(x,y),(x+w,y+h),(0,0,255),2)
     # show image
-    cv2.imshow('debug', cv2.resize(hsv_feed, (hsv_feed.shape[1]//2, hsv_feed.shape[0]//2)))
+    cv2.imshow('debug', cv2.resize(mask, (hsv_feed.shape[1]//2, hsv_feed.shape[0]//2)))
+    cv2.moveWindow('debug', 1250, 10)
     cv2.waitKey(1)
     
 

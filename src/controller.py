@@ -53,7 +53,7 @@ DEBUG_SKIN_MASK = True
 SHOW_MODEL_OUTPUTS = False
 
 # ========== Saving images
-IMAGE_SAVE_FOLDER = 'images/outer_lap/final/saddle6'
+IMAGE_SAVE_FOLDER = 'images/inner_lap/first5k'
 SNAPSHOT_FREQUENCY = 2
 COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
@@ -62,7 +62,7 @@ RESIZE_FACTOR = 20
 DRIVING_MODEL_LOAD_FOLDER = 'models/outer_lap/5convlayers/final/saddle6'
 
 # ========== Operating
-OPERATING_MODE = Operating_Mode.MANUAL
+OPERATING_MODE = Operating_Mode.TAKE_PICTURES
 LINEAR_SPEED = 0.3645
 ANGULAR_SPEED = 1.21
 
