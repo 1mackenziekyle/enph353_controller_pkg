@@ -55,22 +55,22 @@ DEBUG_SKIN_MASK = True
 SHOW_MODEL_OUTPUTS = False
 
 # ========== Saving images
-IMAGE_SAVE_FOLDER = 'images/inner_lap/first/saddle1'
+IMAGE_SAVE_FOLDER = 'images/inner_lap/first/saddle2'
 SNAPSHOT_FREQUENCY = 2
 COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
 
 # ========== Operating 
-OPERATING_MODE = Operating_Mode.SADDLE
+OPERATING_MODE = Operating_Mode.TAKE_PICTURES
 TEST_INNER_LOOP = True
 
 # ========== Model Settings
 OUTER_LOOP_LINEAR_SPEED = 0.3645
 OUTER_LOOP_ANGULAR_SPEED = 1.21
-INNER_LOOP_LINEAR_SPEED = 0.25
+INNER_LOOP_LINEAR_SPEED = 0.266
 INNER_LOOP_ANGULAR_SPEED = 1.0
 OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/final/saddle6'
-INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first5k'
+INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first/saddle2'
 
 
 
@@ -183,6 +183,7 @@ class Controller:
     
 
     def RunDriveInnerLoopState(self):
+        TRUCK_STOP_CONTOUR_AREA = 70000
         # chech for truck
         if not self.truck_passed:
             hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
@@ -197,7 +198,7 @@ class Controller:
                 totalArea = sum([cv2.contourArea(contour) for contour in contours])
                 cv2.imshow('Hazard Detection', self.downsample_image(mask, 2))
                 # cv2.putText(mask, 'max area: ' + str(totalArea // 1000) + 'k', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-                if totalArea > 80000:
+                if totalArea > TRUCK_STOP_CONTOUR_AREA:
                     # cv2.putText(mask, 'STOP', (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 5, (0, 0, 255), 20, cv2.LINE_AA)
                     self.state = ControllerState.WAIT_FOR_TRUCK
                     self.cmd_vel_publisher.publish(Twist()) # Stop moving
@@ -251,7 +252,7 @@ class Controller:
 
 
     def RunWaitForTruckState(self):
-        TOL_TRUCK_X = 30
+        TOL_TRUCK_X = 5
         hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
         min_headlight = (0, 190, 30)
         max_headlight = (10, 210, 50)
