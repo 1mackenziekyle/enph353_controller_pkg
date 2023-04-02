@@ -100,8 +100,39 @@ def display_truck_mask(image):
     cv2.waitKey(1)
     
 
+def sense_letters(image):
+    cv_image = CvBridge().imgmsg_to_cv2(image, "bgr8")
+    hsv_feed = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+    min_road = (118, 110, 90)
+    max_road = (122, 255, 210)
+    mask = cv2.inRange(hsv_feed, min_road, max_road)
+    BLUR_SIZE = 5
+    mask[:mask.shape[0]*2//3,:] = 0 # zero out top 2/3
+    result = mask
+
+    contours, hierarchy = cv2.findContours(result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours = [contour for contour in contours if cv2.contourArea(contour) > 50 and cv2.contourArea(contour) < 300]
+    if len(contours) > 0:
+        for i, c in enumerate(contours):
+            x,y,w,h = cv2.boundingRect(c)
+            color = (255,255,255)
+            cv2.rectangle(hsv_feed, (x, y), (x + w, y + h), color, 1)
+            cv2.putText(hsv_feed, str(int(cv2.contourArea(c))), (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            # overlay on image
+            # shape: (50,50)
+            # display: 5 per line
+            topleft = (30 + (i // 5) * 160, 30 + (i % 5) * 160)
+            hsv_feed[topleft[0]:topleft[0]+150, topleft[1]:topleft[1]+150] = np.stack([cv2.resize(result[y:y+50, x:x+50], (150, 150))]*3, axis=-1)
+            
+
+    cv2.imshow('debug mask', cv2.resize(result, (hsv_feed.shape[1]//2, hsv_feed.shape[0]//2)))
+    cv2.imshow('debug hsv', cv2.resize(hsv_feed, (hsv_feed.shape[1]//2, hsv_feed.shape[0]//2)))
+    cv2.waitKey(1)
+    cv2.moveWindow('debug hsv', 1220, 10)
+    cv2.moveWindow('debug mask', 1220, 500)
+
 # set up subscribers
-rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=display_debug_window)
+rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=sense_letters)
 
 # forever
 rospy.spin()

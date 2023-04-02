@@ -108,6 +108,7 @@ class Controller:
             self.inner_loop_driving_model = tf.keras.models.load_model(self.inner_loop_driving_model_path)
         self.take_pictures = True
         self.truck_passed = False
+        self.done = False
 
 
 
@@ -123,15 +124,16 @@ class Controller:
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
         self.show_camera_feed(self.camera_feed)
-        if self.iters == 100: # TODO: REMOVE AFTER TIME TRIALS
-            self.license_plate_publisher.publish(str('Team8,multi21,-1,XR58'))
-        if self.iters == 370:
+        if self.iters == 370 and self.operating_mode == Operating_Mode.MODEL:
             self. state = ControllerState.DRIVE_INNER_LOOP # TODO: REMOVE WHEN LICENSE PLATES DONE
-        if self.iters == 780:
+        if self.iters == 780 and self.operating_mode == Operating_Mode.MODEL:
             self.state = ControllerState.END
         print('=== state: ', self.state)
         # Jump to state
         self.RunCurrentState()
+        # TODO: REMOVE
+        time.sleep(0.04) # simulate running model
+        # 40 ms seems to be the maximum delay between cmd_vel messages without causing the robot to leave track4
 
 
 
@@ -145,12 +147,14 @@ class Controller:
             self.RunDriveOuterLoopState()
         elif self.state == ControllerState.DRIVE_INNER_LOOP:
             self.RunDriveInnerLoopState()
-        elif self.state == ControllerState.MANUAL_DRIVE:
-            self.RunManualDriveState()
         elif self.state == ControllerState.WAIT_FOR_PEDESTRIAN:
             self.RunWaitForPedestrianState()
         elif self.state == ControllerState.WAIT_FOR_TRUCK:
             self.RunWaitForTruckState()
+        elif self.state == ControllerState.END:
+            self.RunEndState()
+        elif self.state == ControllerState.MANUAL_DRIVE:
+            self.RunManualDriveState()
 
 
 
@@ -189,19 +193,19 @@ class Controller:
 
     def RunDriveInnerLoopState(self):
         TRUCK_STOP_CONTOUR_AREA = 70000
-        # chech for truck
+        # check for truck
+        hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
+        min_road = (0, 0, 70)
+        max_road = (10, 10, 90)
+        road_mask = cv2.inRange(hsv_feed, min_road, max_road)
         if not self.truck_passed:
-            hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
-            min_road = (0, 0, 70)
-            max_road = (10, 10, 90)
-            mask = cv2.inRange(hsv_feed, min_road, max_road)
-            h = mask.shape[0]
-            mask[:6*h//10, :] = 0 # zero out top 3/4 
-            mask[7*h//10:, :] = 0 # zero out bottom 1/4
-            contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            road_mask_cropped = road_mask.copy()
+            h = road_mask.shape[0]
+            road_mask_cropped[:6*h//10, :] = 0 # zero out top 3/4 
+            road_mask_cropped[7*h//10:, :] = 0 # zero out bottom 1/4
+            contours, hierarchy = cv2.findContours(road_mask_cropped, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             if len(contours) > 0:
                 totalArea = sum([cv2.contourArea(contour) for contour in contours])
-                cv2.imshow('Hazard Detection', self.downsample_image(mask, 2))
                 # cv2.putText(mask, 'max area: ' + str(totalArea // 1000) + 'k', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
                 if totalArea > TRUCK_STOP_CONTOUR_AREA:
                     # cv2.putText(mask, 'STOP', (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 5, (0, 0, 255), 20, cv2.LINE_AA)
@@ -212,6 +216,7 @@ class Controller:
         predicted_action = np.argmax(softmaxes)
         move = self.convert_action_to_cmd_vel(predicted_action)
         self.cmd_vel_publisher.publish(move)
+        cv2.imshow('Hazard Detection', self.downsample_image(road_mask, 2))
         return
 
 
@@ -220,9 +225,13 @@ class Controller:
         """
         End the competition timer and enter the end state
         """
-        self.license_plate_publisher.publish(str('Team8,multi21,-1,XR58'))
-        self.cmd_vel_publisher.publish(Twist())
-        self.state = ControllerState.END
+        if not self.done:
+            self.license_plate_publisher.publish(str('Team8,multi21,-1,XR58'))
+            final_move = Twist()
+            final_move.angular.z = 5
+            self.cmd_vel_publisher.publish(final_move)
+            cv2.destroyWindow('Hazard Detection')
+            self.done = True
         return
 
 
@@ -243,7 +252,7 @@ class Controller:
 
     
     def RunWaitForPedestrianState(self):
-        TOL_SKIN_X = 30
+        TOL_SKIN_X = 50
         min_skin =(5,60,60)
         max_skin = (12,90,90)
         hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
