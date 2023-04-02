@@ -19,12 +19,13 @@ class Operating_Mode(Enum):
     TAKE_PICTURES = 3
     SADDLE = 4,
 class ControllerState(Enum):
-    INIT = 1,
-    DRIVE_OUTER_LOOP = 2,
-    DRIVE_INNER_LOOP = 3,
-    WAIT_FOR_PEDESTRIAN = 4,
-    WAIT_FOR_TRUCK = 5,
-    MANUAL_DRIVE = 6,
+    INIT                    = 1,
+    DRIVE_OUTER_LOOP        = 2,
+    DRIVE_INNER_LOOP        = 3,
+    WAIT_FOR_PEDESTRIAN     = 4,
+    WAIT_FOR_TRUCK          = 5,
+    END                     = 6,
+    MANUAL_DRIVE            = 7,
 class Image_Type(Enum):
     BGR = 1,
     GRAY = 2
@@ -55,14 +56,14 @@ DEBUG_SKIN_MASK = True
 SHOW_MODEL_OUTPUTS = False
 
 # ========== Saving images
-IMAGE_SAVE_FOLDER = 'images/inner_lap/first/saddle2'
+IMAGE_SAVE_FOLDER = 'images/inner_lap/first/base10000'
 SNAPSHOT_FREQUENCY = 2
 COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
 
 # ========== Operating 
-OPERATING_MODE = Operating_Mode.TAKE_PICTURES
-TEST_INNER_LOOP = True
+OPERATING_MODE = Operating_Mode.MODEL
+TEST_INNER_LOOP = False
 
 # ========== Model Settings
 OUTER_LOOP_LINEAR_SPEED = 0.3645
@@ -70,7 +71,7 @@ OUTER_LOOP_ANGULAR_SPEED = 1.21
 INNER_LOOP_LINEAR_SPEED = 0.266
 INNER_LOOP_ANGULAR_SPEED = 1.0
 OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/final/saddle6'
-INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first/saddle2'
+INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first/base10000'
 
 
 
@@ -124,6 +125,10 @@ class Controller:
         self.show_camera_feed(self.camera_feed)
         if self.iters == 100: # TODO: REMOVE AFTER TIME TRIALS
             self.license_plate_publisher.publish(str('Team8,multi21,-1,XR58'))
+        if self.iters == 370:
+            self. state = ControllerState.DRIVE_INNER_LOOP # TODO: REMOVE WHEN LICENSE PLATES DONE
+        if self.iters == 780:
+            self.state = ControllerState.END
         print('=== state: ', self.state)
         # Jump to state
         self.RunCurrentState()
@@ -211,6 +216,17 @@ class Controller:
 
 
 
+    def RunEndState(self):
+        """
+        End the competition timer and enter the end state
+        """
+        self.license_plate_publisher.publish(str('Team8,multi21,-1,XR58'))
+        self.cmd_vel_publisher.publish(Twist())
+        self.state = ControllerState.END
+        return
+
+
+
 
     def RunManualDriveState(self):
         print(self.vels)
@@ -252,14 +268,14 @@ class Controller:
 
 
     def RunWaitForTruckState(self):
-        TOL_TRUCK_X = 5
+        TOL_TRUCK_X = 50    
         hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
         min_headlight = (0, 190, 30)
         max_headlight = (10, 210, 50)
         headlight_mask = cv2.inRange(hsv_feed, min_headlight, max_headlight)
         contours, hierarchy = cv2.findContours(headlight_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         if len(contours) > 0:
-            contours = [c for c in contours if cv2.contourArea(c) > 5]
+            contours = [c for c in contours if cv2.contourArea(c) >= 2]
             if len(contours) > 0:
                 moments = cv2.moments(max(contours, key=cv2.contourArea))
                 cX = int(moments["m10"] / moments["m00"])
@@ -434,4 +450,5 @@ class Controller:
             fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         cv2.putText(img=out, text="iters: " + str(self.iters), org=(150, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         cv2.putText(img=out, text="Mode: " + str(self.operating_mode.name), org=(450, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
+        cv2.putText(img=out, text='Take Pictures: ' + str(self.take_pictures), org=(20, 180), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         return out
