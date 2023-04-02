@@ -111,6 +111,7 @@ class Controller:
         self.take_pictures = False
         self.truck_passed = False
         self.done = False
+        self.license_plates = {} # key: parking spot string, value: license plate string (e.g. 'P1': 'QX12')
 
 
 
@@ -119,9 +120,6 @@ class Controller:
         Enter RunState() for current state
 
         Update and display camera feed
-
-        (Temporary) Send a message of value -1 to '/license_plate' topic after 100 iterations
-        for time trials
         """
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
