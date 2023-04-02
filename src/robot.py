@@ -20,7 +20,6 @@ rospy.init_node('robot', anonymous=True)
 robot = controller.Controller(
     operating_mode=controller.OPERATING_MODE,
     image_save_location=ASSETS_FOLDER + controller.IMAGE_SAVE_FOLDER,
-    image_type=controller.Image_Type.GRAY,
     start_snapshots=20,
     snapshot_freq=controller.SNAPSHOT_FREQUENCY,
     image_resize_factor=controller.RESIZE_FACTOR,

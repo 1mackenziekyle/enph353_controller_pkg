@@ -15,9 +15,11 @@ import matplotlib.pyplot as plt
 
 class Operating_Mode(Enum):
     MANUAL = 1,
-    MODEL = 2
-    TAKE_PICTURES = 3
+    MODEL = 2,
+    TAKE_PICTURES = 3,
     SADDLE = 4,
+    TAKE_PICTURES_LISENCE = 5
+
 class ControllerState(Enum):
     INIT                    = 1,
     DRIVE_OUTER_LOOP        = 2,
@@ -51,18 +53,19 @@ Where {X} is the current state.
 
 # ======================== Configuration
 # ========== Debugging
-DEBUG_RED_MASK = True
-DEBUG_SKIN_MASK = True
+DEBUG_RED_MASK = False
+DEBUG_SKIN_MASK = False
 SHOW_MODEL_OUTPUTS = False
-
+DEBUG_HSV_OUTPUT = False
+DEBUG_LISENCE_MASK = True
 # ========== Saving images
 IMAGE_SAVE_FOLDER = 'images/inner_lap/first/base10000'
 SNAPSHOT_FREQUENCY = 2
-COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
-RESIZE_FACTOR = 20
+COLOR_CONVERTER = None
+RESIZE_FACTOR = 1
 
 # ========== Operating 
-OPERATING_MODE = Operating_Mode.MODEL
+OPERATING_MODE = Operating_Mode.MANUAL
 TEST_INNER_LOOP = False
 
 # ========== Model Settings
@@ -76,7 +79,7 @@ INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first/base10000'
 
 
 class Controller:
-    def __init__(self, operating_mode, image_save_location, image_type, start_snapshots, snapshot_freq, 
+    def __init__(self, operating_mode, image_save_location, start_snapshots, snapshot_freq, 
                  image_resize_factor, cmd_vel_publisher, license_plate_publisher, outer_loop_driving_model_path, 
                  inner_loop_driving_model_path, outer_loop_linear_speed, outer_loop_angular_speed, inner_loop_linear_speed, 
                  inner_loop_angular_speed, color_converter):
@@ -88,7 +91,6 @@ class Controller:
         self.vels = Twist()
         self.camera_feed = None
         self.image_save_location=image_save_location
-        self.image_type = image_type
         self.start_snapshots = start_snapshots
         self.snapshot_freq = snapshot_freq
         self.image_resize_factor = image_resize_factor
@@ -106,7 +108,7 @@ class Controller:
         if self.operating_mode is not Operating_Mode.TAKE_PICTURES:
             self.outer_loop_driving_model = tf.keras.models.load_model(self.outer_loop_driving_model_path)
             self.inner_loop_driving_model = tf.keras.models.load_model(self.inner_loop_driving_model_path)
-        self.take_pictures = True
+        self.take_pictures = False
         self.truck_passed = False
         self.done = False
 
@@ -123,7 +125,6 @@ class Controller:
         """
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
-        self.show_camera_feed(self.camera_feed)
         if self.iters == 370 and self.operating_mode == Operating_Mode.MODEL:
             self. state = ControllerState.DRIVE_INNER_LOOP # TODO: REMOVE WHEN LICENSE PLATES DONE
         if self.iters == 780 and self.operating_mode == Operating_Mode.MODEL:
@@ -131,6 +132,7 @@ class Controller:
         print('=== state: ', self.state)
         # Jump to state
         self.RunCurrentState()
+        self.show_camera_feed(self.camera_feed)
         # TODO: REMOVE
         time.sleep(0.04) # simulate running model
         # 40 ms seems to be the maximum delay between cmd_vel messages without causing the robot to leave track4
@@ -187,6 +189,35 @@ class Controller:
             predicted_action = np.argmax(softmaxes) 
             move = self.convert_action_to_cmd_vel(predicted_action)
         self.cmd_vel_publisher.publish(move)
+        if DEBUG_LISENCE_MASK:
+            hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
+            min_grey = (0, 0, 97)
+            max_grey = (0,0, 210)
+            min_plate_grey = (100, 0, 85)
+            max_plate_grey = (130, 70, 180)
+            min_blue = (110, 135, 90)
+            max_blue = (125, 210, 200)
+            blue_mask = cv2.inRange(hsv_feed, min_blue, max_blue)
+            outer_mask = cv2.inRange(hsv_feed, min_grey, max_grey) 
+            plate_mask = cv2.inRange(hsv_feed, min_plate_grey, max_plate_grey)
+            lisence = cv2.bitwise_or(outer_mask, plate_mask)
+            lisence = cv2.bitwise_or(lisence, blue_mask)
+            lisence_mask = cv2.GaussianBlur(lisence, (31, 31), cv2.BORDER_DEFAULT)
+            _, lisence_mask = cv2.threshold(lisence_mask, 190, 255, cv2.THRESH_BINARY)
+            lisence_mask_stacked = np.stack([lisence_mask, lisence_mask, lisence_mask], axis=-1)
+            lisence_contours, lisence_heierarchy = cv2.findContours(image=lisence_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
+            if (len(lisence_contours) > 0):
+                lisence_contours_sorted = sorted(lisence_contours, key = lambda x : cv2.contourArea(x)) # sort by area
+                biggest_area = cv2.contourArea(lisence_contours_sorted[-1])
+                if 100000 > biggest_area > 15000:
+                    print(biggest_area)
+                    x,y,w,h = cv2.boundingRect(lisence_contours_sorted[-1])
+                    if x > 0 and x + w < lisence_mask.shape[1] : 
+                        cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,0,255),6) 
+            # cv2.imshow('Lisence Mask', self.downsample_image(lisence_mask_stacked,2))
+            #cv2.moveWindow('Lisence Mask', 10, 500)
+            cv2.waitKey(1)
+
         return
 
     
@@ -240,13 +271,50 @@ class Controller:
     def RunManualDriveState(self):
         print(self.vels)
         print('Take Pictures: ', self.take_pictures)
+        hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
         if self.operating_mode == Operating_Mode.TAKE_PICTURES: 
             self.save_labelled_image()
+        elif self.operating_mode == Operating_Mode.TAKE_PICTURES_LISENCE:
+            self.save_labelled_image_lisence()
         elif self.operating_mode == Operating_Mode.SADDLE:
             human_action = self.convert_cmd_vels_to_action(self.vels.linear.x, self.vels.angular.z)
             model_action = np.argmax(self.call_outer_loop_driving_model(self.camera_feed))
             if human_action != model_action:
                 self.save_labelled_image()
+        if DEBUG_HSV_OUTPUT:
+            cv2.imshow('HSV Image', self.downsample_image(hsv_feed, 2))
+            cv2.moveWindow('HSV Image', 10, 500)
+            cv2.waitKey(1)
+        if DEBUG_LISENCE_MASK:
+            min_grey = (0, 0, 97)
+            max_grey = (0,0, 210)
+            min_plate_grey = (100, 0, 85)
+            max_plate_grey = (130, 70, 180)
+            min_blue = (110, 135, 90)
+            max_blue = (125, 210, 200)
+            blue_mask = cv2.inRange(hsv_feed, min_blue, max_blue)
+            outer_mask = cv2.inRange(hsv_feed, min_grey, max_grey) 
+            plate_mask = cv2.inRange(hsv_feed, min_plate_grey, max_plate_grey)
+            lisence = cv2.bitwise_or(outer_mask, plate_mask)
+            lisence = cv2.bitwise_or(lisence, blue_mask)
+            lisence_mask = cv2.GaussianBlur(lisence, (31, 31), cv2.BORDER_DEFAULT)
+            _, lisence_mask = cv2.threshold(lisence_mask, 190, 255, cv2.THRESH_BINARY)
+            lisence_mask_stacked = np.stack([lisence_mask, lisence_mask, lisence_mask], axis=-1)
+            lisence_contours, lisence_heierarchy = cv2.findContours(image=lisence_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
+            if (len(lisence_contours) > 0):
+                lisence_contours_sorted = sorted(lisence_contours, key = lambda x : cv2.contourArea(x)) # sort by area
+                biggest_area = cv2.contourArea(lisence_contours_sorted[-1])
+                if 100000 > biggest_area > 15000:
+                    print(biggest_area)
+                    x,y,w,h = cv2.boundingRect(lisence_contours_sorted[-1])
+                    if x > 0 and x + w < lisence_mask.shape[1] : 
+                        cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,0,255),6) 
+                        cv2.putText(self.camera_feed, 'License Plate', (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+            #cv2.imshow('Lisence Mask', self.downsample_image(lisence_mask_stacked,2))
+            #cv2.moveWindow('Lisence Mask', 10, 500)
+            cv2.waitKey(1)
+
+             
         return
 
 
@@ -298,6 +366,12 @@ class Controller:
 
 
 # ==================== Utility Functions =======================
+    def self_labelled_image_lisence(self):
+        if self.iters > self.start_snapshots:
+            if self.iters % self.snapshot_freq == 0:
+                if self.take_pictures:
+                    self.save_image(self.downsample_image(self.camera_feed, self.image_resize_factor, self.color_converter), str([self.vels.linear.x, self.vels.angular.z]) + str(datetime.datetime.now()))
+
     def save_labelled_image(self):
         if self.iters > self.start_snapshots:
             if self.iters % self.snapshot_freq == 0:
