@@ -188,34 +188,7 @@ class Controller:
             predicted_action = np.argmax(softmaxes) 
             move = self.convert_action_to_cmd_vel(predicted_action)
         self.cmd_vel_publisher.publish(move)
-        if DEBUG_LISENCE_MASK:
-            hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
-            min_grey = (0, 0, 97)
-            max_grey = (0,0, 210)
-            min_plate_grey = (100, 0, 85)
-            max_plate_grey = (130, 70, 180)
-            min_blue = (110, 135, 90)
-            max_blue = (125, 210, 200)
-            blue_mask = cv2.inRange(hsv_feed, min_blue, max_blue)
-            outer_mask = cv2.inRange(hsv_feed, min_grey, max_grey) 
-            plate_mask = cv2.inRange(hsv_feed, min_plate_grey, max_plate_grey)
-            lisence = cv2.bitwise_or(outer_mask, plate_mask)
-            lisence = cv2.bitwise_or(lisence, blue_mask)
-            lisence_mask = cv2.GaussianBlur(lisence, (31, 31), cv2.BORDER_DEFAULT)
-            _, lisence_mask = cv2.threshold(lisence_mask, 190, 255, cv2.THRESH_BINARY)
-            lisence_mask_stacked = np.stack([lisence_mask, lisence_mask, lisence_mask], axis=-1)
-            lisence_contours, lisence_heierarchy = cv2.findContours(image=lisence_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
-            if (len(lisence_contours) > 0):
-                lisence_contours_sorted = sorted(lisence_contours, key = lambda x : cv2.contourArea(x)) # sort by area
-                biggest_area = cv2.contourArea(lisence_contours_sorted[-1])
-                if 100000 > biggest_area > 15000:
-                    print(biggest_area)
-                    x,y,w,h = cv2.boundingRect(lisence_contours_sorted[-1])
-                    if x > 0 and x + w < lisence_mask.shape[1] : 
-                        cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,0,255),6) 
-            # cv2.imshow('Lisence Mask', self.downsample_image(lisence_mask_stacked,2))
-            #cv2.moveWindow('Lisence Mask', 10, 500)
-            cv2.waitKey(1)
+        cv2.waitKey(1)
 
         return
 
@@ -283,35 +256,6 @@ class Controller:
             cv2.imshow('HSV Image', self.downsample_image(hsv_feed, 2))
             cv2.moveWindow('HSV Image', 10, 500)
             cv2.waitKey(1)
-        if DEBUG_LISENCE_MASK:
-            min_grey = (0, 0, 97)
-            max_grey = (0,0, 210)
-            min_plate_grey = (100, 0, 85)
-            max_plate_grey = (130, 70, 180)
-            min_blue = (110, 135, 90)
-            max_blue = (125, 210, 200)
-            blue_mask = cv2.inRange(hsv_feed, min_blue, max_blue)
-            outer_mask = cv2.inRange(hsv_feed, min_grey, max_grey) 
-            plate_mask = cv2.inRange(hsv_feed, min_plate_grey, max_plate_grey)
-            lisence = cv2.bitwise_or(outer_mask, plate_mask)
-            lisence = cv2.bitwise_or(lisence, blue_mask)
-            lisence_mask = cv2.GaussianBlur(lisence, (31, 31), cv2.BORDER_DEFAULT)
-            _, lisence_mask = cv2.threshold(lisence_mask, 190, 255, cv2.THRESH_BINARY)
-            lisence_mask_stacked = np.stack([lisence_mask, lisence_mask, lisence_mask], axis=-1)
-            lisence_contours, lisence_heierarchy = cv2.findContours(image=lisence_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
-            if (len(lisence_contours) > 0):
-                lisence_contours_sorted = sorted(lisence_contours, key = lambda x : cv2.contourArea(x)) # sort by area
-                biggest_area = cv2.contourArea(lisence_contours_sorted[-1])
-                if 100000 > biggest_area > 15000:
-                    print(biggest_area)
-                    x,y,w,h = cv2.boundingRect(lisence_contours_sorted[-1])
-                    if x > 0 and x + w < lisence_mask.shape[1] : 
-                        cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,0,255),6) 
-                        cv2.putText(self.camera_feed, 'License Plate', (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-            #cv2.imshow('Lisence Mask', self.downsample_image(lisence_mask_stacked,2))
-            #cv2.moveWindow('Lisence Mask', 10, 500)
-            cv2.waitKey(1)
-
              
         return
 
