@@ -130,10 +130,9 @@ class Controller:
         print('=== state: ', self.state)
         # Jump to state
         self.RunCurrentState()
-        # self.label_license_plate(self.camera_feed)
+        self.label_license_plate(self.camera_feed)
         self.show_camera_feed(self.camera_feed)
         # TODO: REMOVE
-        time.sleep(0.04) # simulate running model
         # 40 ms seems to be the maximum delay between cmd_vel messages without causing the robot to leave track4
 
 
@@ -329,8 +328,10 @@ class Controller:
             if cv2.contourArea(c) > 10:
                 skin_cntrs.append(c)
         if len(skin_cntrs) > 0:
-            x,y,w,h = cv2.boundingRect(skin_cntrs[0])
+            stacked_contour = np.vstack(skin_cntrs)
+            x,y,w,h = cv2.boundingRect(stacked_contour)
             cv2.rectangle(self.camera_feed,(x,y),(x+w,y+h),(0,255,0),2) 
+            cv2.putText(self.camera_feed, 'Pedestrian', (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             for c in skin_cntrs:
                 M = cv2.moments(c)
                 cX = int(M["m10"] / M["m00"])
@@ -564,5 +565,5 @@ class Controller:
             fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         cv2.putText(img=out, text="iters: " + str(self.iters), org=(150, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         cv2.putText(img=out, text="Mode: " + str(self.operating_mode.name), org=(450, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
-        cv2.putText(img=out, text='Take Pictures: ' + str(self.take_pictures), org=(20, 180), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
+        # cv2.putText(img=out, text='Take Pictures: ' + str(self.take_pictures), org=(20, 180), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
         return out
