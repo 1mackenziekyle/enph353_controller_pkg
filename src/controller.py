@@ -57,15 +57,15 @@ DEBUG_RED_MASK = False
 DEBUG_SKIN_MASK = False
 SHOW_MODEL_OUTPUTS = False
 DEBUG_HSV_OUTPUT = False
-DEBUG_LISENCE_MASK = True
+DEBUG_LISENCE_MASK = False
 # ========== Saving images
 IMAGE_SAVE_FOLDER = 'images/inner_lap/first/base10000'
 SNAPSHOT_FREQUENCY = 2
-COLOR_CONVERTER = None
-RESIZE_FACTOR = 1
+COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
+RESIZE_FACTOR = 20
 
 # ========== Operating 
-OPERATING_MODE = Operating_Mode.MANUAL
+OPERATING_MODE = Operating_Mode.MODEL
 TEST_INNER_LOOP = False
 
 # ========== Model Settings
@@ -111,6 +111,7 @@ class Controller:
         self.take_pictures = False
         self.truck_passed = False
         self.done = False
+        self.license_plates = {} # key: parking spot string, value: license plate string (e.g. 'P1': 'QX12')
 
 
 
@@ -119,19 +120,17 @@ class Controller:
         Enter RunState() for current state
 
         Update and display camera feed
-
-        (Temporary) Send a message of value -1 to '/license_plate' topic after 100 iterations
-        for time trials
         """
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
-        if self.iters == 370 and self.operating_mode == Operating_Mode.MODEL:
+        if self.iters == 400 and self.operating_mode == Operating_Mode.MODEL:
             self. state = ControllerState.DRIVE_INNER_LOOP # TODO: REMOVE WHEN LICENSE PLATES DONE
-        if self.iters == 780 and self.operating_mode == Operating_Mode.MODEL:
+        if self.iters == 850 and self.operating_mode == Operating_Mode.MODEL:
             self.state = ControllerState.END
         print('=== state: ', self.state)
         # Jump to state
         self.RunCurrentState()
+        # self.label_license_plate(self.camera_feed)
         self.show_camera_feed(self.camera_feed)
         # TODO: REMOVE
         time.sleep(0.04) # simulate running model
@@ -259,7 +258,6 @@ class Controller:
         if not self.done:
             self.license_plate_publisher.publish(str('Team8,multi21,-1,XR58'))
             final_move = Twist()
-            final_move.angular.z = 5
             self.cmd_vel_publisher.publish(final_move)
             cv2.destroyWindow('Hazard Detection')
             self.done = True
@@ -366,6 +364,39 @@ class Controller:
 
 
 # ==================== Utility Functions =======================
+    def label_license_plate(self, image):
+            hsv_feed = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            min_grey = (0, 0, 97)
+            max_grey = (0,0, 210)
+            min_plate_grey = (100, 0, 85)
+            max_plate_grey = (130, 70, 180)
+            min_blue = (110, 135, 90)
+            max_blue = (125, 210, 200)
+            blue_mask = cv2.inRange(hsv_feed, min_blue, max_blue)
+            outer_mask = cv2.inRange(hsv_feed, min_grey, max_grey) 
+            plate_mask = cv2.inRange(hsv_feed, min_plate_grey, max_plate_grey)
+            lisence = cv2.bitwise_or(outer_mask, plate_mask)
+            lisence = cv2.bitwise_or(lisence, blue_mask)
+            lisence_mask = cv2.GaussianBlur(lisence, (31, 31), cv2.BORDER_DEFAULT)
+            _, lisence_mask = cv2.threshold(lisence_mask, 190, 255, cv2.THRESH_BINARY)
+            lisence_mask_stacked = np.stack([lisence_mask, lisence_mask, lisence_mask], axis=-1)
+            contours, hierarchy = cv2.findContours(image=lisence_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
+            if (len(contours) > 0):
+                contours = sorted(contours, key = lambda x : cv2.contourArea(x)) # sort by area
+                biggest_area = cv2.contourArea(contours[-1])
+                if 100000 > biggest_area > 15000:
+                    print(biggest_area)
+                    x,y,w,h = cv2.boundingRect(contours[-1])
+                    if x > 0 and x + w < lisence_mask.shape[1] : 
+                        cv2.rectangle(image,(x,y),(x+w,y+h),(0,0,255),6) 
+                        cv2.putText(image, 'License Plate', (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+                        cv2.putText(image, 'License Plate detected', (20, image.shape[0]-20), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (255, 255, 255), 4)
+        # cv2.putText(img=out, text='Take Pictures: ' + str(self.take_pictures), org=(20, 180), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
+
+
+
+
+
     def self_labelled_image_lisence(self):
         if self.iters > self.start_snapshots:
             if self.iters % self.snapshot_freq == 0:
