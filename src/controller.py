@@ -133,6 +133,7 @@ class Controller:
         self.label_license_plate(self.camera_feed)
         self.show_camera_feed(self.camera_feed)
         # TODO: REMOVE
+        time.sleep(0.04)
         # 40 ms seems to be the maximum delay between cmd_vel messages without causing the robot to leave track4
 
 
@@ -392,6 +393,8 @@ class Controller:
                         cv2.rectangle(image,(x,y),(x+w,y+h),(0,0,255),6) 
                         cv2.putText(image, 'License Plate', (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
                         cv2.putText(image, 'License Plate detected', (20, image.shape[0]-20), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (255, 255, 255), 4)
+                        cv2.imshow('License Plate', image[y:y+h, x:x+w])
+                        cv2.waitKey(1)
         # cv2.putText(img=out, text='Take Pictures: ' + str(self.take_pictures), org=(20, 180), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
 
 
