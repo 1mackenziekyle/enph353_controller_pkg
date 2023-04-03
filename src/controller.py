@@ -123,14 +123,14 @@ class Controller:
         """
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
-        if self.iters == 370 and self.operating_mode == Operating_Mode.MODEL:
+        if self.iters == 400 and self.operating_mode == Operating_Mode.MODEL:
             self. state = ControllerState.DRIVE_INNER_LOOP # TODO: REMOVE WHEN LICENSE PLATES DONE
-        if self.iters == 780 and self.operating_mode == Operating_Mode.MODEL:
+        if self.iters == 850 and self.operating_mode == Operating_Mode.MODEL:
             self.state = ControllerState.END
         print('=== state: ', self.state)
         # Jump to state
         self.RunCurrentState()
-        self.label_license_plate(self.camera_feed)
+        # self.label_license_plate(self.camera_feed)
         self.show_camera_feed(self.camera_feed)
         # TODO: REMOVE
         time.sleep(0.04) # simulate running model
@@ -258,7 +258,6 @@ class Controller:
         if not self.done:
             self.license_plate_publisher.publish(str('Team8,multi21,-1,XR58'))
             final_move = Twist()
-            final_move.angular.z = 5
             self.cmd_vel_publisher.publish(final_move)
             cv2.destroyWindow('Hazard Detection')
             self.done = True
