@@ -59,7 +59,7 @@ SHOW_MODEL_OUTPUTS = False
 DEBUG_HSV_OUTPUT = False
 DEBUG_LISENCE_MASK = False
 # ========== Saving images
-IMAGE_SAVE_FOLDER = 'images/inner_lap/first/base10000'
+IMAGE_SAVE_FOLDER = 'images/outer_lap/final/saddle7'
 SNAPSHOT_FREQUENCY = 2
 COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
@@ -130,7 +130,7 @@ class Controller:
         print('=== state: ', self.state)
         # Jump to state
         self.RunCurrentState()
-        self.label_license_plate(self.camera_feed)
+        # self.label_license_plate(self.camera_feed)
         self.show_camera_feed(self.camera_feed)
         # TODO: REMOVE
         time.sleep(0.04)
