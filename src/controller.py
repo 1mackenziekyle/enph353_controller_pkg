@@ -57,13 +57,13 @@ SHOW_MODEL_OUTPUTS = False
 DEBUG_HSV_OUTPUT = False
 DEBUG_LISENCE_MASK = False
 # ========== Saving images
-IMAGE_SAVE_FOLDER = 'images/outer_lap/faster/saddle7'
+IMAGE_SAVE_FOLDER = 'images/outer_lap/final/saddle7'
 SNAPSHOT_FREQUENCY = 2
 COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
 
 # ========== Operating 
-OPERATING_MODE = Operating_Mode.SADDLE
+OPERATING_MODE = Operating_Mode.MANUAL
 TEST_INNER_LOOP = False
 
 # ========== Model Settings
@@ -73,7 +73,8 @@ OUTER_LOOP_LINEAR_SPEED = 0.5
 OUTER_LOOP_ANGULAR_SPEED = 2.14 
 INNER_LOOP_LINEAR_SPEED = 0.266
 INNER_LOOP_ANGULAR_SPEED = 1.0
-OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/faster/base10000'
+# OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/final/saddle6'
+OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/final/saddle6'
 INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first/base10000'
 
 
@@ -131,8 +132,7 @@ class Controller:
             self.state = ControllerState.END
         # Jump to state
         self.RunCurrentState()
-        # if self.operating_mode is Operating_Mode.MODEL: 
-        #     self.label_license_plate(self.camera_feed)
+        # self.label_license_plate(self.camera_feed)
         self.show_camera_feed(self.camera_feed)
         print(self.state, 'Loop time: ', int((time.time() - start_time) * 1000), 'time between loops: ', int((time.time() - self.prev_time_ms) * 1000))
         self.prev_time_ms = time.time()
