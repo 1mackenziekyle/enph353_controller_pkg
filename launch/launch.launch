@@ -5,4 +5,9 @@
          name="move_robot" 
          output="screen">
    </node>
+   <node pkg="lisence_pkg"
+         type="lisence_plate.py"
+         name="lisence_identifying"
+         output="screen">
+   </node>
 </launch>

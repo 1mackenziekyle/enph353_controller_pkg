@@ -65,7 +65,7 @@ COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
 
 # ========== Operating 
-OPERATING_MODE = Operating_Mode.MODEL
+OPERATING_MODE = Operating_Mode.MANUAL
 TEST_INNER_LOOP = False
 
 # ========== Model Settings
@@ -73,7 +73,7 @@ OUTER_LOOP_LINEAR_SPEED = 0.3645
 OUTER_LOOP_ANGULAR_SPEED = 1.21
 INNER_LOOP_LINEAR_SPEED = 0.266
 INNER_LOOP_ANGULAR_SPEED = 1.0
-OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/final/saddle6'
+OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/saddle/saddle0'
 INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first/base10000'
 
 
@@ -105,7 +105,7 @@ class Controller:
         self.operating_mode = operating_mode
         self.state = ControllerState.INIT
         self.color_converter = color_converter
-        if self.operating_mode is not Operating_Mode.TAKE_PICTURES:
+        if self.operating_mode is not Operating_Mode.TAKE_PICTURES and not Operating_Mode.MANUAL:
             self.outer_loop_driving_model = tf.keras.models.load_model(self.outer_loop_driving_model_path)
             self.inner_loop_driving_model = tf.keras.models.load_model(self.inner_loop_driving_model_path)
         self.take_pictures = False
