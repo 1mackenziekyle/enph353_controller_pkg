@@ -238,7 +238,6 @@ class Controller:
 
 
 
-
     def RunManualDriveState(self):
         print(self.vels)
         print('Take Pictures: ', self.take_pictures)
@@ -256,7 +255,6 @@ class Controller:
             cv2.imshow('HSV Image', self.downsample_image(hsv_feed, 2))
             cv2.moveWindow('HSV Image', 10, 500)
             cv2.waitKey(1)
-             
         return
 
 
@@ -339,7 +337,6 @@ class Controller:
                         cv2.putText(image, 'License Plate detected', (20, image.shape[0]-20), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (255, 255, 255), 4)
                         cv2.imshow('License Plate', image[y:y+h, x:x+w])
                         cv2.waitKey(1)
-        # cv2.putText(img=out, text='Take Pictures: ' + str(self.take_pictures), org=(20, 180), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
 
 
 
