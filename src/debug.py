@@ -131,8 +131,17 @@ def sense_letters(image):
     cv2.moveWindow('debug hsv', 1220, 10)
     cv2.moveWindow('debug mask', 1220, 500)
 
+def waste_time(image):
+    """
+    Takes approx 50ms to run
+    """
+    for i in range(100):
+        for j in range(200):
+            print(i**2 / (j+1)**0.5)
+
+    
 # set up subscribers
-rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=sense_letters)
+rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=waste_time)
 
 # forever
 rospy.spin()

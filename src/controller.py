@@ -65,7 +65,7 @@ COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
 
 # ========== Operating 
-OPERATING_MODE = Operating_Mode.MANUAL
+OPERATING_MODE = Operating_Mode.MODEL
 TEST_INNER_LOOP = False
 
 # ========== Model Settings
@@ -110,6 +110,7 @@ class Controller:
             self.inner_loop_driving_model = tf.keras.models.load_model(self.inner_loop_driving_model_path)
         self.take_pictures = False
         self.truck_passed = False
+        self.prev_time_ms = time.time()
         self.done = False
         self.license_plates = {} # key: parking spot string, value: license plate string (e.g. 'P1': 'QX12')
 
@@ -127,13 +128,15 @@ class Controller:
             self. state = ControllerState.DRIVE_INNER_LOOP # TODO: REMOVE WHEN LICENSE PLATES DONE
         if self.iters == 850 and self.operating_mode == Operating_Mode.MODEL:
             self.state = ControllerState.END
-        print('=== state: ', self.state)
+        print('=== state: ', self.state, '=== Time between loop: ', int((time.time() - self.prev_time_ms) * 1000))
+        self.prev_time_ms = time.time()
         # Jump to state
         self.RunCurrentState()
-        # self.label_license_plate(self.camera_feed)
+        # if self.operating_mode is Operating_Mode.MODEL: 
+        #     self.label_license_plate(self.camera_feed)
         self.show_camera_feed(self.camera_feed)
         # TODO: REMOVE
-        time.sleep(0.04)
+        # time.sleep(0.04)
         # 40 ms seems to be the maximum delay between cmd_vel messages without causing the robot to leave track4
 
 
@@ -336,6 +339,7 @@ class Controller:
                         cv2.putText(image, 'License Plate', (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
                         cv2.putText(image, 'License Plate detected', (20, image.shape[0]-20), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (255, 255, 255), 4)
                         cv2.imshow('License Plate', image[y:y+h, x:x+w])
+                        cv2.moveWindow('License Plate', 20, 500)
                         cv2.waitKey(1)
 
 
