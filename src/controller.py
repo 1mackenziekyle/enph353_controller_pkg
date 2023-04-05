@@ -73,7 +73,7 @@ OUTER_LOOP_LINEAR_SPEED = 0.3645
 OUTER_LOOP_ANGULAR_SPEED = 1.21
 INNER_LOOP_LINEAR_SPEED = 0.266
 INNER_LOOP_ANGULAR_SPEED = 1.0
-OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/saddle/saddle0'
+OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/saddle/saddle6'
 INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first/base10000'
 
 
