@@ -129,6 +129,8 @@ class Controller:
             self. state = ControllerState.DRIVE_INNER_LOOP # TODO: REMOVE WHEN LICENSE PLATES DONE
         if self.iters == 850 and self.operating_mode == Operating_Mode.MODEL:
             self.state = ControllerState.END
+        print('=== state: ', self.state, '=== Time between loop: ', int((time.time() - self.prev_time_ms) * 1000))
+        self.prev_time_ms = time.time()
         # Jump to state
         self.RunCurrentState()
         # if self.operating_mode is Operating_Mode.MODEL: 
@@ -340,7 +342,8 @@ class Controller:
                         cv2.rectangle(image,(x,y),(x+w,y+h),(0,0,255),6) 
                         cv2.putText(image, 'License Plate', (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
                         cv2.putText(image, 'License Plate detected', (20, image.shape[0]-20), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (255, 255, 255), 4)
-                        cv2.imshow('License Plate', hsv_feed[y:y+h, x:x+w])
+                        cv2.imshow('License Plate', image[y:y+h, x:x+w])
+                        cv2.moveWindow('License Plate', 20, 500)
                         cv2.waitKey(1)
 
 
