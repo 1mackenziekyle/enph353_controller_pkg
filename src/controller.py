@@ -331,13 +331,12 @@ class Controller:
                 contours = sorted(contours, key = lambda x : cv2.contourArea(x)) # sort by area
                 biggest_area = cv2.contourArea(contours[-1])
                 if 100000 > biggest_area > 15000:
-                    print(biggest_area)
                     x,y,w,h = cv2.boundingRect(contours[-1])
                     if x > 0 and x + w < lisence_mask.shape[1] : 
                         cv2.rectangle(image,(x,y),(x+w,y+h),(0,0,255),6) 
                         cv2.putText(image, 'License Plate', (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
                         cv2.putText(image, 'License Plate detected', (20, image.shape[0]-20), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (255, 255, 255), 4)
-                        cv2.imshow('License Plate', image[y:y+h, x:x+w])
+                        cv2.imshow('License Plate', hsv_feed[y:y+h, x:x+w])
                         cv2.waitKey(1)
         # cv2.putText(img=out, text='Take Pictures: ' + str(self.take_pictures), org=(20, 180), fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=1, color=(255,255,255), thickness=2)
 
