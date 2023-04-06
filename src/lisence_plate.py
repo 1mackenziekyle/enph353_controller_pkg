@@ -8,9 +8,12 @@ from sensor_msgs.msg import Image
 from config import ASSETS_FOLDER
 from cv_bridge import CvBridge
 import cv2
+import tensorflow as tf
 # Constants
+CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/character_recognition/char_recog_cheaper'
 # relative paths (inside ASSETS FOLDER)
 bridge = CvBridge()
+model = tf.keras.models.load_model(CHARACTER_RECOGNITION_MODEL_PATH)
 
 # init ros node
 rospy.init_node('Liscence_plate_detection', anonymous=True)
@@ -60,6 +63,7 @@ def label_license_plate(data):
             #print(biggest_area)
             x,y,w,h = cv2.boundingRect(contours[-1])
             if x > 0 and x + w < lisence_mask.shape[1] : 
+                # read license plate
                 cv2.rectangle(image,(x,y),(x+w,y+h),(0,0,255),6) 
                 lisence_plate_img = image[y:y+h, x:x+w]
                 lisence_plate_img_hsv = cv2.cvtColor(lisence_plate_img, cv2.COLOR_BGR2HSV)
