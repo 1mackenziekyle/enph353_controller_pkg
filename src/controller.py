@@ -65,7 +65,7 @@ COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
 
 # ========== Operating 
-OPERATING_MODE = Operating_Mode.MODEL
+OPERATING_MODE = Operating_Mode.MANUAL
 TEST_INNER_LOOP = False
 
 # ========== Model Settings
@@ -73,7 +73,7 @@ OUTER_LOOP_LINEAR_SPEED = 0.3645
 OUTER_LOOP_ANGULAR_SPEED = 1.21
 INNER_LOOP_LINEAR_SPEED = 0.266
 INNER_LOOP_ANGULAR_SPEED = 1.0
-OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/saddle/saddle6'
+OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/cheapest/saddle7'
 INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first/base10000'
 
 
@@ -105,7 +105,7 @@ class Controller:
         self.operating_mode = operating_mode
         self.state = ControllerState.INIT
         self.color_converter = color_converter
-        if self.operating_mode is not Operating_Mode.TAKE_PICTURES and not Operating_Mode.MANUAL:
+        if self.operating_mode is not Operating_Mode.TAKE_PICTURES and self.operating_mode is not Operating_Mode.MANUAL:
             self.outer_loop_driving_model = tf.keras.models.load_model(self.outer_loop_driving_model_path)
             self.inner_loop_driving_model = tf.keras.models.load_model(self.inner_loop_driving_model_path)
         self.take_pictures = False
@@ -122,19 +122,21 @@ class Controller:
 
         Update and display camera feed
         """
+        start_time = time.time()
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
         if self.iters == 400 and self.operating_mode == Operating_Mode.MODEL:
             self. state = ControllerState.DRIVE_INNER_LOOP # TODO: REMOVE WHEN LICENSE PLATES DONE
         if self.iters == 850 and self.operating_mode == Operating_Mode.MODEL:
             self.state = ControllerState.END
-        print('=== state: ', self.state, '=== Time between loop: ', int((time.time() - self.prev_time_ms) * 1000))
-        self.prev_time_ms = time.time()
         # Jump to state
         self.RunCurrentState()
         # if self.operating_mode is Operating_Mode.MODEL: 
         #     self.label_license_plate(self.camera_feed)
         self.show_camera_feed(self.camera_feed)
+        print(self.state, 'Loop time: ', int((time.time() - start_time) * 1000), 'time between loops: ', int((time.time() - self.prev_time_ms) * 1000))
+        self.prev_time_ms = time.time()
+
         # TODO: REMOVE
         # time.sleep(0.04)
         # 40 ms seems to be the maximum delay between cmd_vel messages without causing the robot to leave track4

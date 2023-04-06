@@ -8,9 +8,12 @@ from sensor_msgs.msg import Image
 from config import ASSETS_FOLDER
 from cv_bridge import CvBridge
 import cv2
+import tensorflow as tf
 # Constants
+CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/character_recognition/char_recog_cheaper'
 # relative paths (inside ASSETS FOLDER)
 bridge = CvBridge()
+model = tf.keras.models.load_model(CHARACTER_RECOGNITION_MODEL_PATH)
 
 # init ros node
 rospy.init_node('Liscence_plate_detection', anonymous=True)
@@ -37,9 +40,9 @@ def label_license_plate(data):
         contours = sorted(contours, key = lambda x : cv2.contourArea(x)) # sort by area
         biggest_area = cv2.contourArea(contours[-1])
         if 100000 > biggest_area > 15000:
-            print(biggest_area)
             x,y,w,h = cv2.boundingRect(contours[-1])
             if x > 0 and x + w < lisence_mask.shape[1] : 
+                # read license plate
                 cv2.rectangle(image,(x,y),(x+w,y+h),(0,0,255),6) 
                 lisence_plate_img = image[y:y+h, x:x+w]
                 lisence_plate_img_hsv = cv2.cvtColor(lisence_plate_img, cv2.COLOR_BGR2HSV)
@@ -47,8 +50,11 @@ def label_license_plate(data):
                 cv2.putText(image, 'License Plate', (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
                 cv2.putText(image, 'License Plate detected', (20, image.shape[0]-20), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (255, 255, 255), 4)
                 cv2.imshow('License Plate', image[y:y+h, x:x+w])
-                cv2.imshow('Lisen')
                 cv2.waitKey(1)
+                cv2.moveWindow('License Plate', 650, 100)
+                for i in range(6):
+                    print(np.argmax(model(np.expand_dims(np.expand_dims(lisence_plate_chars[:20, :15], 0), axis=-1))), " ", end="")
+                print()
 
 #initialize rospy subscriber
 rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback= label_license_plate)
