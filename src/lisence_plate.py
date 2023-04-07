@@ -60,17 +60,13 @@ def label_license_plate(data):
         contours = sorted(contours, key = lambda x : cv2.contourArea(x)) # sort by area
         biggest_area = cv2.contourArea(contours[-1])
         if 100000 > biggest_area > 15000:
-<<<<<<< HEAD
             #print(biggest_area)
-=======
->>>>>>> done driving medium speed
             x,y,w,h = cv2.boundingRect(contours[-1])
             if x > 0 and x + w < lisence_mask.shape[1] : 
                 # read license plate
                 cv2.rectangle(image,(x,y),(x+w,y+h),(0,0,255),6) 
                 lisence_plate_img = image[y:y+h, x:x+w]
                 lisence_plate_img_hsv = cv2.cvtColor(lisence_plate_img, cv2.COLOR_BGR2HSV)
-<<<<<<< HEAD
                 print(lisence_plate_img_hsv.shape)
                 lisence_plate_chars = cv2.inRange(lisence_plate_img_hsv, min_blue_letters, max_blue_letters)
                 lisence_chars_stacked = np.stack([lisence_plate_chars, lisence_plate_chars, lisence_plate_chars], axis=-1)
@@ -108,17 +104,6 @@ def label_license_plate(data):
                         show(char_s, label='char' + str(num_contours))
                         num_contours += 1
                 show(lisence_chars_stacked, label='lisence')
-=======
-                lisence_plate_chars = cv2.inRange(lisence_plate_img_hsv, min_blue, max_blue)
-                cv2.putText(image, 'License Plate', (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-                cv2.putText(image, 'License Plate detected', (20, image.shape[0]-20), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (255, 255, 255), 4)
-                cv2.imshow('License Plate', image[y:y+h, x:x+w])
-                cv2.waitKey(1)
-                cv2.moveWindow('License Plate', 650, 100)
-                for i in range(6):
-                    print(np.argmax(model(np.expand_dims(np.expand_dims(lisence_plate_chars[:20, :15], 0), axis=-1))), " ", end="")
-                print()
->>>>>>> done driving medium speed
 
 #initialize rospy subscriber
 rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback= label_license_plate)
