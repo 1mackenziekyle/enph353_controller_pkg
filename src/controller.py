@@ -137,7 +137,7 @@ class Controller:
         # if self.operating_mode is Operating_Mode.MODEL: 
         #     self.label_license_plate(self.camera_feed)
         self.show_camera_feed(self.camera_feed)
-        # print(self.state, 'Loop time: ', int((time.time() - start_time) * 1000), 'time between loops: ', int((time.time() - self.prev_time_ms) * 1000))
+        print(self.state, 'Loop time: ', int((time.time() - start_time) * 1000), 'time between loops: ', int((time.time() - self.prev_time_ms) * 1000))
         self.prev_time_ms = time.time()
 
 
