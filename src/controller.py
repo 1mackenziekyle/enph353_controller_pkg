@@ -71,9 +71,11 @@ TEST_INNER_LOOP = False
 # OUTER_LOOP_ANGULAR_SPEED = 1.21
 OUTER_LOOP_LINEAR_SPEED = 0.5
 OUTER_LOOP_ANGULAR_SPEED = 2.14 
-INNER_LOOP_LINEAR_SPEED = 0.266
-INNER_LOOP_ANGULAR_SPEED = 1.0
-OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/faster/saddle7'
+# INNER_LOOP_LINEAR_SPEED = 0.266
+# INNER_LOOP_ANGULAR_SPEED = 1.0
+INNER_LOOP_LINEAR_SPEED = 0.3
+INNER_LOOP_ANGULAR_SPEED = 1.13
+OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/faster/saddle8'
 INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first/base10000'
 
 
@@ -126,7 +128,7 @@ class Controller:
         start_time = time.time()
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
-        if self.iters == 330 and self.operating_mode == Operating_Mode.MODEL:
+        if self.iters == 300 and self.operating_mode == Operating_Mode.MODEL:
             self. state = ControllerState.DRIVE_INNER_LOOP # TODO: REMOVE WHEN LICENSE PLATES DONE
         if self.iters == 850 and self.operating_mode == Operating_Mode.MODEL:
             self.state = ControllerState.END
@@ -187,7 +189,7 @@ class Controller:
             timeout = 50 
         else: 
             timeout = 35
-        if self.iters > self.pedestrian_passed_timestamp + 50: # times out after 100 iterations
+        if self.iters > self.pedestrian_passed_timestamp + timeout: # times out after 100 iterations
             self.pedestrian_passed = False
             self.pedestrian_passed_timestamp = 100000 # reset to default value
         if self.check_if_at_crosswalk() and not self.pedestrian_passed:
@@ -198,7 +200,6 @@ class Controller:
         else:
             if not self.pedestrian_passed:
                 self.pedestrian_passed = self.early_check_for_pedestrian() # update self.pedestrian_passed
-            print(f"pedestrian passed: {self.pedestrian_passed}")
             softmaxes = self.call_outer_loop_driving_model(self.camera_feed)
             predicted_action = np.argmax(softmaxes) 
             move = self.convert_action_to_cmd_vel(predicted_action)
@@ -348,16 +349,20 @@ class Controller:
             return False
         maxRedContour = max(red_contours, key=cv2.contourArea)
         if cv2.contourArea(maxRedContour) < 2000: # close enough to check for pedestrian but not right on top
+            print('Searching...', end="")
             x_red, y_red, w_red, h_red = cv2.boundingRect(maxRedContour)
             skin_mask = cv2.inRange(hsv_feed, min_skin, max_skin)
             skin_contours, skin_hierarchy = cv2.findContours(image=skin_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
             if len(skin_contours) == 0:
+                print('Pedestrian not found')
                 return False
             maxSkinContour = max(skin_contours, key=cv2.contourArea)
             x_skin, y_skin, w_skin, h_skin = cv2.boundingRect(maxSkinContour)
-            if (x_red < x_skin < x_red + w_red) and len(red_contours) == 2: 
+            if (x_red < x_skin < x_red + w_red):
                 self.pedestrian_passed_timestamp = self.iters 
+                print('Pedestrian crossed')
                 return True
+            print('Pedestrian off of road.')
         return False
 
             
