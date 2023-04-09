@@ -57,7 +57,7 @@ SHOW_MODEL_OUTPUTS = False
 DEBUG_HSV_OUTPUT = False
 DEBUG_LISENCE_MASK = False
 # ========== Saving images
-IMAGE_SAVE_FOLDER = 'images/outer_lap/faster/saddle8'
+IMAGE_SAVE_FOLDER = 'images/outer_lap/faster/saddle10'
 SNAPSHOT_FREQUENCY = 2
 COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
@@ -75,7 +75,7 @@ OUTER_LOOP_ANGULAR_SPEED = 2.14
 # INNER_LOOP_ANGULAR_SPEED = 1.0
 INNER_LOOP_LINEAR_SPEED = 0.3
 INNER_LOOP_ANGULAR_SPEED = 1.13
-OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/faster/saddle8'
+OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/faster/saddle10'
 INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first/base10000'
 
 
@@ -417,12 +417,14 @@ class Controller:
         """
         Returns True/False of whether robot thinks it is at the crosswalk and should stop.
         """
-        Y_exp_0 = 650
-        Y_exp_1 = 410
+        # Y_exp_0 = 650
+        # Y_exp_1 = 410
+        Y_exp_0 = 550
+        Y_exp_1 = 400
         if self.outer_loop_linear_speed < 0.4: 
             radius_of_tolerance = 40
         else: 
-            radius_of_tolerance = 60
+            radius_of_tolerance = 50
         min_red = (0, 200, 170)   # lower end of blue
         max_red = (255, 255, 255)   # upper end of blue
         hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)

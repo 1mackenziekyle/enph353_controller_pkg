@@ -53,7 +53,9 @@ def display_red_mask(img):
             cv2.rectangle(out,(x,y),(x+w,y+h),255,6)
             cv2.putText(out, 'A: ' + str(cv2.contourArea(c)), (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 1, 255, 2, cv2.LINE_AA)
             cv2.putText(out, 'w: ' + str(w), (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 1, 255, 2, cv2.LINE_AA)
-    cv2.imshow('Red Mask', cv2.resize(out, (out.shape[1]//2, out.shape[0]//2)))
+            cv2.putText(out, 'Cy: ' + str(y + h//2), (x//2, y+h//2), cv2.FONT_HERSHEY_SIMPLEX, 1, 255, 2, cv2.LINE_AA)
+    # cv2.imshow('Red Mask', cv2.resize(out, (out.shape[1]//2, out.shape[0]//2)))
+    cv2.imshow('Red Mask', out)
     cv2.waitKey(1)
 
 
