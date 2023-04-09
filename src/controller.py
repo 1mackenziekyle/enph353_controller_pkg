@@ -316,7 +316,7 @@ class Controller:
             maxTruckContour = max(truck_contours, key=cv2.contourArea)
             truckSize = cv2.contourArea(maxTruckContour)
             print('Truck Size: ', truckSize)
-            if truckSize < 10.0:
+            if truckSize < 5.0:
                 self.state = ControllerState.DRIVE_INNER_LOOP
                 self.truck_passed = True
                 return
