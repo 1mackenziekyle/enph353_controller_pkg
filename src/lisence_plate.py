@@ -10,10 +10,10 @@ from cv_bridge import CvBridge
 import cv2
 import tensorflow as tf
 # Constants
-CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/character_recognition/char_recog_cheaper'
+#CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/character_recognition/char_recog_cheaper'
 # relative paths (inside ASSETS FOLDER)
 bridge = CvBridge()
-model = tf.keras.models.load_model(CHARACTER_RECOGNITION_MODEL_PATH)
+#model = tf.keras.models.load_model(CHARACTER_RECOGNITION_MODEL_PATH)
 
 # init ros node
 rospy.init_node('Liscence_plate_detection', anonymous=True)
@@ -76,11 +76,22 @@ def label_license_plate(data):
                 char_contours = sorted(char_contours, key = lambda x : cv2.contourArea(x)) # sort by area
                 print(len(char_contours))
                 num_contours = 0;
+                if (len(char_contours) >= 4):
+                    slice_bool = False
+                    num_slices = 0
+                    del char_contours[4:]
+                elif(len(char_contours) <= 1):
+                    slice_bool = False
+                    num_slices = 0
+                else:
+                    slice_bool = True
+                    num_slices = 4 - len(char_contours)
+                char_contours.reverse() 
                 for contour in char_contours:
                     print(get_aspect_ratio(contour))
-                    if (get_aspect_ratio(contour) < .4 and cv2.contourArea(contour) > 300):
-                        x1,y1,w1,h1 = slice(contour, first=True)
-                        x2,y2,w2,h2 = slice(contour, first=False)
+                    if (num_slices >0 and slice):
+                        x1,y1,w1,h1 = slice(contour, True)
+                        x2,y2,w2,h2 = slice(contour, False)
                         draw_rect(x1, y1, w1, h1, lisence_chars_stacked)
                         draw_rect(x2, y2, w2, h2, lisence_chars_stacked)
                         char = lisence_plate_img_hsv[y1:y1 + h1, x1: x1 + w1]
@@ -93,6 +104,7 @@ def label_license_plate(data):
                         char_s2 = cv2.resize(char_s2, (20,20))
                         show(char_s2, label='char' + str(num_contours))
                         num_contours += 1
+                        num_slices = num_slices - 1
                     else:
                         x1,y1,w1,h1 = cv2.boundingRect(contour)
                         draw_rect(x1, y1, w1, h1, lisence_chars_stacked)
