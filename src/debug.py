@@ -67,11 +67,7 @@ def waste_time(image):
 
     
 # set up subscribers
-<<<<<<< HEAD
-rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=waste_time)
-=======
 rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=display_red_mask)
->>>>>>> kyle/drive/outer_loop/faster
 
 # forever
 rospy.spin()
