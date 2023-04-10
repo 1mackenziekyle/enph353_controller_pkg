@@ -66,6 +66,7 @@ def find_x_value(contour):
 def label_license_plate(data):
     image = bridge.imgmsg_to_cv2(data, 'bgr8')
     hsv_feed = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    # Find bounding box for license plate and parking number
     min_grey = (0, 0, 97)
     max_grey = (0,0, 210)
     min_plate_grey = (100, 0, 85)
@@ -79,11 +80,14 @@ def label_license_plate(data):
     blue_mask = cv2.inRange(hsv_feed, min_blue, max_blue)
     outer_mask = cv2.inRange(hsv_feed, min_grey, max_grey) 
     plate_mask = cv2.inRange(hsv_feed, min_plate_grey, max_plate_grey)
+    # combine masks
     lisence = cv2.bitwise_or(outer_mask, plate_mask)
     lisence = cv2.bitwise_or(lisence, blue_mask)
+    # blur and threshold to get rid of lines
     lisence_mask = cv2.GaussianBlur(lisence, (31, 31), cv2.BORDER_DEFAULT)
     _, lisence_mask = cv2.threshold(lisence_mask, 190, 255, cv2.THRESH_BINARY)
-    lisence_mask_stacked = np.stack([lisence_mask, lisence_mask, lisence_mask], axis=-1)
+    # lisence_mask_stacked = np.stack([lisence_mask, lisence_mask, lisence_mask], axis=-1)
+    # find biggest c    ontour
     contours, hierarchy = cv2.findContours(image=lisence_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
     contours = [c for c in contours if get_min_aspect_ratio(c) > .5]
     contours = [c for c in contours if cv2.contourArea(c) > 4000]

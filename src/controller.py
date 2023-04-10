@@ -57,7 +57,7 @@ SHOW_MODEL_OUTPUTS = False
 DEBUG_HSV_OUTPUT = False
 DEBUG_LISENCE_MASK = False
 # ========== Saving images
-IMAGE_SAVE_FOLDER = 'images/outer_lap/faster/saddle2'
+IMAGE_SAVE_FOLDER = 'images/outer_lap/faster/saddle10'
 SNAPSHOT_FREQUENCY = 2
 COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
@@ -67,13 +67,15 @@ OPERATING_MODE = Operating_Mode.MANUAL
 TEST_INNER_LOOP = False
 
 # ========== Model Settings
-OUTER_LOOP_LINEAR_SPEED = 0.3645
-OUTER_LOOP_ANGULAR_SPEED = 1.21
-#OUTER_LOOP_LINEAR_SPEED = 0.5
-#OUTER_LOOP_ANGULAR_SPEED = 2.14 
-INNER_LOOP_LINEAR_SPEED = 0.266
-INNER_LOOP_ANGULAR_SPEED = 1.0
-OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/final/saddle6'
+# OUTER_LOOP_LINEAR_SPEED = 0.3645
+# OUTER_LOOP_ANGULAR_SPEED = 1.21
+OUTER_LOOP_LINEAR_SPEED = 0.5
+OUTER_LOOP_ANGULAR_SPEED = 2.14 
+# INNER_LOOP_LINEAR_SPEED = 0.266
+# INNER_LOOP_ANGULAR_SPEED = 1.0
+INNER_LOOP_LINEAR_SPEED = 0.3
+INNER_LOOP_ANGULAR_SPEED = 1.13
+OUTER_LOOP_DRIVING_MODEL_PATH = 'models/outer_lap/5convlayers/faster/saddle10'
 INNER_LOOP_DRIVING_MODEL_PATH = 'models/inner_lap/first/base10000'
 
 
@@ -110,9 +112,10 @@ class Controller:
             self.inner_loop_driving_model = tf.keras.models.load_model(self.inner_loop_driving_model_path)
         self.take_pictures = False
         self.truck_passed = False
+        self.pedestrian_passed = False
+        self.pedestrian_passed_timestamp = 100000 # default value s.t. never reached unless set to lower val
         self.prev_time_ms = time.time()
         self.done = False
-        self.license_plates = {} # key: parking spot string, value: license plate string (e.g. 'P1': 'QX12')
 
 
 
@@ -125,7 +128,7 @@ class Controller:
         start_time = time.time()
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
-        if self.iters == 400 and self.operating_mode == Operating_Mode.MODEL:
+        if self.iters == 300 and self.operating_mode == Operating_Mode.MODEL:
             self. state = ControllerState.DRIVE_INNER_LOOP # TODO: REMOVE WHEN LICENSE PLATES DONE
         if self.iters == 850 and self.operating_mode == Operating_Mode.MODEL:
             self.state = ControllerState.END
@@ -137,9 +140,6 @@ class Controller:
         print(self.state, 'Loop time: ', int((time.time() - start_time) * 1000), 'time between loops: ', int((time.time() - self.prev_time_ms) * 1000))
         self.prev_time_ms = time.time()
 
-        # TODO: REMOVE
-        # time.sleep(0.04)
-        # 40 ms seems to be the maximum delay between cmd_vel messages without causing the robot to leave track4
 
 
 
@@ -184,12 +184,22 @@ class Controller:
 
 
     def RunDriveOuterLoopState(self):
-        if self.check_if_at_crosswalk():
+        # reset pedestrian_passed flag
+        if self.outer_loop_linear_speed < 0.4: 
+            timeout = 50 
+        else: 
+            timeout = 35
+        if self.iters > self.pedestrian_passed_timestamp + timeout: # times out after 100 iterations
+            self.pedestrian_passed = False
+            self.pedestrian_passed_timestamp = 100000 # reset to default value
+        if self.check_if_at_crosswalk() and not self.pedestrian_passed:
             move = Twist() # don't move
             self.state = ControllerState.WAIT_FOR_PEDESTRIAN # state transition ? 
             print(f"state changed to {self.state}")
             time.sleep(0.1) # TODO: Better way to do this ?
         else:
+            if not self.pedestrian_passed:
+                self.pedestrian_passed = self.early_check_for_pedestrian() # update self.pedestrian_passed
             softmaxes = self.call_outer_loop_driving_model(self.camera_feed)
             predicted_action = np.argmax(softmaxes) 
             move = self.convert_action_to_cmd_vel(predicted_action)
@@ -297,6 +307,19 @@ class Controller:
         hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
         min_headlight = (0, 190, 30)
         max_headlight = (10, 210, 50)
+        min_truck = (0, 0, 48)
+        max_truck = (5, 5, 62)
+        truck_mask = cv2.inRange(hsv_feed, min_truck, max_truck)
+        truck_mask = cv2.erode(truck_mask, np.ones((2,2), np.uint8), iterations=1)
+        truck_contours, truck_hierarchy = cv2.findContours(truck_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        if len(truck_contours) > 0: 
+            maxTruckContour = max(truck_contours, key=cv2.contourArea)
+            truckSize = cv2.contourArea(maxTruckContour)
+            print('Truck Size: ', truckSize)
+            if truckSize < 5.0:
+                self.state = ControllerState.DRIVE_INNER_LOOP
+                self.truck_passed = True
+                return
         headlight_mask = cv2.inRange(hsv_feed, min_headlight, max_headlight)
         contours, hierarchy = cv2.findContours(headlight_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         if len(contours) > 0:
@@ -312,8 +335,37 @@ class Controller:
         return
 
 
-
 # ==================== Utility Functions =======================
+    def early_check_for_pedestrian(self):
+        min_skin =(5,60,60)
+        max_skin = (12,90,90)
+        min_red = (0, 200, 170)
+        max_red = (10, 255, 255)
+        hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)
+        red_mask = cv2.inRange(hsv_feed, min_red, max_red)
+        red_contours, red_hierarchy = cv2.findContours(image=red_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
+        if len(red_contours) == 0: 
+            return False
+        maxRedContour = max(red_contours, key=cv2.contourArea)
+        if cv2.contourArea(maxRedContour) < 2000: # close enough to check for pedestrian but not right on top
+            print('Searching...', end="")
+            x_red, y_red, w_red, h_red = cv2.boundingRect(maxRedContour)
+            skin_mask = cv2.inRange(hsv_feed, min_skin, max_skin)
+            skin_contours, skin_hierarchy = cv2.findContours(image=skin_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
+            if len(skin_contours) == 0:
+                print('Pedestrian not found')
+                return False
+            maxSkinContour = max(skin_contours, key=cv2.contourArea)
+            x_skin, y_skin, w_skin, h_skin = cv2.boundingRect(maxSkinContour)
+            if (x_red < x_skin < x_red + w_red):
+                self.pedestrian_passed_timestamp = self.iters 
+                print('Pedestrian crossed')
+                return True
+            print('Pedestrian off of road.')
+        return False
+
+            
+
     def label_license_plate(self, image):
             hsv_feed = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
             min_grey = (0, 0, 97)
@@ -364,9 +416,14 @@ class Controller:
         """
         Returns True/False of whether robot thinks it is at the crosswalk and should stop.
         """
-        Y_exp_0 = 650
-        Y_exp_1 = 410
-        radius_of_tolerance = 40
+        # Y_exp_0 = 650
+        # Y_exp_1 = 410
+        Y_exp_0 = 550
+        Y_exp_1 = 400
+        if self.outer_loop_linear_speed < 0.4: 
+            radius_of_tolerance = 40
+        else: 
+            radius_of_tolerance = 50
         min_red = (0, 200, 170)   # lower end of blue
         max_red = (255, 255, 255)   # upper end of blue
         hsv_feed = cv2.cvtColor(self.camera_feed, cv2.COLOR_BGR2HSV)

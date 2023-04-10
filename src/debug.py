@@ -18,118 +18,46 @@ import numpy as np
 rospy.init_node('Debugger', anonymous=True)
 
 
-def display_debug_window(image):
-    cv_image = CvBridge().imgmsg_to_cv2(image, "bgr8")
-    hsv_feed = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
-    min_road = (0, 0, 85)
-    max_road = (255, 3, 210)
-    light_gray_mask = cv2.inRange(hsv_feed, min_road, max_road)
-    ERODE_KERNEL_SIZE = 10
-    BLUR_KERNEL_SIZE = 40
-    LICENSE_AREA_THRESHOLD = 10e3
-    eroded = cv2.erode(light_gray_mask, np.ones((ERODE_KERNEL_SIZE, ERODE_KERNEL_SIZE), np.uint8), iterations=1)
-    blurred = cv2.blur(eroded, (BLUR_KERNEL_SIZE, BLUR_KERNEL_SIZE))
-    eroded_again = cv2.erode(blurred, np.ones((ERODE_KERNEL_SIZE, ERODE_KERNEL_SIZE), np.uint8), iterations=1)
-    result = eroded_again
-    contours, hierarchy = cv2.findContours(result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    if len(contours) > 0:
-        filled_areas = []
-        aspect_ratios = []
-        # Filter out contours that are too wide
-        for contour in contours:
-            rect = cv2.minAreaRect(contour)
-            box = cv2.boxPoints(rect)
-            box = np.int0(box)
-            width = rect[1][0]
-            height = rect[1][1]
-            if width == 0 or height == 0:
-                aspect_ratio = 99
-            elif height > width:
-                aspect_ratio = height / width
-            else:
-                aspect_ratio = width / height
-            aspect_ratios.append(aspect_ratio)
-        contours = [contour for contour, aspect_ratio in zip(contours, aspect_ratios) if aspect_ratio < 2]
-        # get largest square-like contour
-        if len(contours) > 0:
-            for contour in contours:
-                current_contour_mask = np.zeros_like(light_gray_mask)
-                cv2.drawContours(current_contour_mask, [contour], 0, 255, cv2.FILLED)
-                filled_areas.append(cv2.countNonZero(current_contour_mask))
-            maxFilledContour = contours[np.argmax(filled_areas)]
-            rect = cv2.minAreaRect(maxFilledContour)
-            box = cv2.boxPoints(rect)
-            box = np.int0(box)
-            maxArea = cv2.contourArea(box)
-            if maxArea > LICENSE_AREA_THRESHOLD:
-                cv2.drawContours(hsv_feed,[box],0,(255,255,255), 10)
-                cv2.putText(result, 'max area: ' + str(maxArea // 1000) + 'k', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3, cv2.LINE_AA)
-    
-    # display
-    cv2.imshow('mask', cv2.resize(result, (hsv_feed.shape[1]//2, hsv_feed.shape[0]//2)))
-    cv2.imshow('debug', cv2.resize(hsv_feed, (hsv_feed.shape[1]//2, hsv_feed.shape[0]//2)))
-    cv2.moveWindow('debug', 1250, 10)
-    cv2.waitKey(1)
-
-
-
 
 # show debug window
 def display_truck_mask(image):
     cv_image = CvBridge().imgmsg_to_cv2(image, "bgr8")
-
     hsv_feed = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
-    min_road = (0, 0, 85)
-    max_road = (255, 10, 110)
-    mask = cv2.inRange(hsv_feed, min_road, max_road)
-    h = mask.shape[0]
-    mask[:6*h//10, :] = 0 # zero out top 3/4 
-    mask[7*h//10:, :] = 0 # zero out bottom 1/4
+    min_truck = (0, 0, 48)
+    max_truck = (5, 5, 62)
+    mask = cv2.inRange(hsv_feed, min_truck, max_truck)
+    mask = cv2.erode(mask, np.ones((2,2), np.uint8), iterations=1)
     contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    mask = np.stack([mask] * 3, axis=-1)
-    cv2.drawContours(mask, contours, -1, (0, 255, 0), 3)
     if len(contours) > 0:
-        biggestContour = max(contours, key=cv2.contourArea)
-        totalArea = sum([cv2.contourArea(contour) for contour in contours])
-        cv2.putText(mask, 'max area: ' + str(totalArea // 1000) + 'k', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-        if totalArea > 70000:
-            cv2.putText(mask, 'STOP', (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 5, (0, 0, 255), 20, cv2.LINE_AA)
-
-    cv2.imshow('debug', cv2.resize(mask, (hsv_feed.shape[1]//2, hsv_feed.shape[0]//2)))
-    cv2.moveWindow('debug', 1250, 10)
+        maxContour = max(contours, key=cv2.contourArea)
+        truckSize = cv2.contourArea(maxContour)
+        cv2.drawContours(mask, [maxContour], -1, (0,255,0), 3)
+    else:
+        truckSize = 0
+    mask = np.stack((mask,)*3, axis=-1)
+    print('Truck Size: ' + str(truckSize))
+    cv2.imshow('Truck Mask', cv2.resize(mask, (mask.shape[1]//2, mask.shape[0]//2)))
     cv2.waitKey(1)
     
-
-def sense_letters(image):
-    cv_image = CvBridge().imgmsg_to_cv2(image, "bgr8")
-    hsv_feed = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
-    min_road = (118, 110, 90)
-    max_road = (122, 255, 210)
-    mask = cv2.inRange(hsv_feed, min_road, max_road)
-    BLUR_SIZE = 5
-    mask[:mask.shape[0]*2//3,:] = 0 # zero out top 2/3
-    result = mask
-
-    contours, hierarchy = cv2.findContours(result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    contours = [contour for contour in contours if cv2.contourArea(contour) > 50 and cv2.contourArea(contour) < 300]
+def display_red_mask(img):
+    img = CvBridge().imgmsg_to_cv2(img, "bgr8")
+    min_red = (0, 200, 170)   # lower end of blue
+    max_red = (255, 255, 255)   # upper end of blue
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, min_red, max_red)
+    contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    out = np.zeros_like(mask)
     if len(contours) > 0:
-        for i, c in enumerate(contours):
+        for c in contours:
             x,y,w,h = cv2.boundingRect(c)
-            color = (255,255,255)
-            cv2.rectangle(hsv_feed, (x, y), (x + w, y + h), color, 1)
-            cv2.putText(hsv_feed, str(int(cv2.contourArea(c))), (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-            # overlay on image
-            # shape: (50,50)
-            # display: 5 per line
-            topleft = (30 + (i // 5) * 160, 30 + (i % 5) * 160)
-            hsv_feed[topleft[0]:topleft[0]+150, topleft[1]:topleft[1]+150] = np.stack([cv2.resize(result[y:y+50, x:x+50], (150, 150))]*3, axis=-1)
-            
-
-    cv2.imshow('debug mask', cv2.resize(result, (hsv_feed.shape[1]//2, hsv_feed.shape[0]//2)))
-    cv2.imshow('debug hsv', cv2.resize(hsv_feed, (hsv_feed.shape[1]//2, hsv_feed.shape[0]//2)))
+            cv2.rectangle(out,(x,y),(x+w,y+h),255,6)
+            cv2.putText(out, 'A: ' + str(cv2.contourArea(c)), (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 1, 255, 2, cv2.LINE_AA)
+            cv2.putText(out, 'w: ' + str(w), (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 1, 255, 2, cv2.LINE_AA)
+            cv2.putText(out, 'Cy: ' + str(y + h//2), (x//2, y+h//2), cv2.FONT_HERSHEY_SIMPLEX, 1, 255, 2, cv2.LINE_AA)
+    # cv2.imshow('Red Mask', cv2.resize(out, (out.shape[1]//2, out.shape[0]//2)))
+    cv2.imshow('Red Mask', out)
     cv2.waitKey(1)
-    cv2.moveWindow('debug hsv', 1220, 10)
-    cv2.moveWindow('debug mask', 1220, 500)
+
 
 def waste_time(image):
     """
@@ -141,7 +69,7 @@ def waste_time(image):
 
     
 # set up subscribers
-rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=waste_time)
+rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=display_red_mask)
 
 # forever
 rospy.spin()
