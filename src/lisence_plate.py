@@ -1,4 +1,5 @@
 import controller
+import string
 import rospy
 from enum import Enum
 import numpy as np
@@ -15,8 +16,24 @@ CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/char_recog_resize'
 bridge = CvBridge()
 model = tf.keras.models.load_model(CHARACTER_RECOGNITION_MODEL_PATH)
 
+chars = list(string.ascii_uppercase + string.digits)
+ctoi = {c:i for i,c in enumerate(chars)}
+itoc = {i:c for i,c in enumerate(chars)}
+
 # init ros node
 rospy.init_node('Liscence_plate_detection', anonymous=True)
+def character_forwards_pass(img):
+    preds = []
+    for index in range(0,4):
+        input = tf.expand_dims(tf.expand_dims(img[index], -1), 0)
+        probs = model(input)
+        probs = tf.squeeze(probs, axis = 0)
+        if index < 2:
+            pred = str(itoc[np.argmax(probs[:26])])
+        else:
+            pred = str(itoc[26 + np.argmax(probs[26:])])
+        preds.append(pred)          
+    return preds
 def draw_rect(x,y,w,h, image):
     cv2.rectangle(image,(x,y),(x+w,y+h),(0,0,255),6)
 def show(image, label='img'):
@@ -42,6 +59,9 @@ def slice(contour, first):
     else:
         return x+w1,y,w1,h
 
+def find_x_value(contour):
+    x,y,w,h = cv2.boundingRect(contour)
+    return x
 
 def label_license_plate(data):
     image = bridge.imgmsg_to_cv2(data, 'bgr8')
@@ -54,8 +74,8 @@ def label_license_plate(data):
     max_blue = (125, 210, 200)
     min_blue_letters = (110, 100, 85)
     max_blue_letters = (125, 245, 197)
-    max_blue_letters_model = (125,245,200)
-    min_blue_letters_model = (110,100,90)
+    #max_blue_letters_model = (125,245,200)
+    #min_blue_letters_model = (110,100,90)
     blue_mask = cv2.inRange(hsv_feed, min_blue, max_blue)
     outer_mask = cv2.inRange(hsv_feed, min_grey, max_grey) 
     plate_mask = cv2.inRange(hsv_feed, min_plate_grey, max_plate_grey)
@@ -75,7 +95,6 @@ def label_license_plate(data):
            contours = [c for c in contours if get_min_aspect_ratio(c) > .75]
         #print(biggest_area)
         if (len(contours)> 0):
-            print(get_min_aspect_ratio(contours[-1])/cv2.contourArea(contours[-1]))
             x,y,w,h = cv2.boundingRect(contours[-1])
             draw_rect(x,y,w,h, lisence_mask_stacked)
             show(lisence_mask_stacked, 'lisence mask')
@@ -97,6 +116,8 @@ def label_license_plate(data):
                     #print(len(char_contours))
                     num_contours = 0;
                     char_contours.reverse() 
+                    char_img = []
+                    char_img_x_val = []
                     if (len(char_contours) >= 4):
                         slice_bool = False
                         num_slices = 0
@@ -117,12 +138,16 @@ def label_license_plate(data):
                             char = lisence_plate_img_hsv[y1:y1 + h1, x1: x1 + w1]
                             char_s = char[:, :, 1]
                             char_s = cv2.resize(char_s, (20,20))
-                            show(char_s, label='char' + str(num_contours))
+                            char_img.append(char_s)
+                            char_img_x_val.append(x1)
+                            #show(char_s, label='char' + str(num_contours))
                             num_contours += 1
                             char2 = lisence_plate_img_hsv[y2:y2 + h2, x2: x2 + w2]
                             char_s2 = char2[:, :, 1]
                             char_s2 = cv2.resize(char_s2, (20,20))
-                            show(char_s2, label='char' + str(num_contours))
+                            char_img.append(char_s2)
+                            char_img_x_val.append(x2)
+                           # show(char_s2, label='char' + str(num_contours))
                             num_contours += 1
                             num_slices = num_slices - 1
                         else:
@@ -131,16 +156,25 @@ def label_license_plate(data):
                             char = lisence_plate_img_hsv[y1:y1 + h1, x1: x1 + w1]
                             char_s = char[:, :, 1]
                             char_s = cv2.resize(char_s, (20,20))
-                            #print(char_s.shape)
-                            #char = cv2.inRange(char, min_blue_letters_model, max_blue_letters_model)
-                            show(char_s, label='char' + str(num_contours))
+                            char_img.append(char_s)
+                            char_img_x_val.append(x1)
+                            #show(char_s, label='char' + str(num_contours))
                             num_contours += 1
-                    cv2.moveWindow("char0", 650, 50)
-                    cv2.moveWindow("char1", 950, 50)
-                    cv2.moveWindow("char2", 950, 200)
-                    cv2.moveWindow("char3", 650, 200)
+                    imgs, x_vals = zip(*sorted(zip(char_img, char_img_x_val), key= lambda b:b[1]))
+                    imgs = list(imgs)
+                    out = np.concatenate(imgs, axis=1)
+                    show(out, 'full plate')
+
+                    pred = character_forwards_pass(imgs)
+                    print(pred)      
+                    #cv2.moveWindow("char0", 650, 50)
+                    #cv2.moveWindow("char1", 950, 50)
+                    #cv2.moveWindow("char2", 950, 200)
+                    #cv2.moveWindow("char3", 650, 200)
                     show(lisence_chars_stacked, label='lisence')
 
+
+    
 #initialize rospy subscriber
 rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback= label_license_plate)
 
