@@ -335,7 +335,6 @@ class Controller:
         return
 
 
-
 # ==================== Utility Functions =======================
     def early_check_for_pedestrian(self):
         min_skin =(5,60,60)
