@@ -23,13 +23,17 @@ CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/char_recog_resize_2'
 
 # relative paths (inside ASSETS FOLDER)
 class LicensePlateDetection:
-    def __init__(self, model_path, cooldown=0.5):
+    def __init__(self, model_path, cooldown=0.8):
         self.bridge = CvBridge()
         self.model = tf.keras.models.load_model(model_path)
         self.cooldown = cooldown
         self.chars = list(string.ascii_uppercase + string.digits)
         self.ctoi = {c:i for i,c in enumerate(self.chars)}
         self.itoc = {i:c for i,c in enumerate(self.chars)}
+        self.guesses = []
+        self.license_plate_read_timestamp = 10000
+        self.current_parking_spot = 1
+        self.license_plate_publisher = rospy.Publisher('/license_plate', String, queue_size=1)
 
 
 
@@ -86,9 +90,38 @@ class LicensePlateDetection:
     def find_x_value(self, contour):
         x,y,w,h = cv2.boundingRect(contour)
         return x
+    
+
+    def most_frequent(self, List):
+        dict = {}
+        count, itm = 0, ''
+        for item in reversed(List):
+            dict[item] = dict.get(item, 0) + 1
+            if dict[item] >= count :
+                count, itm = dict[item], item
+        return(itm)
+
+
+    def char_array_to_string(self, s):
+        # initialization of string to ""
+        new = ""
+        # traverse in the string
+        for x in s:
+            new += x
+        # return string
+        return new
 
 
     def label_license_plate(self, data):
+        # update timestamp
+        if len(self.guesses) > 0 and time.time() - self.license_plate_read_timestamp > self.cooldown:
+            best_guess = self.most_frequent(self.guesses)
+            print(f'Best guesss out of {len(self.guesses)}: ', best_guess)
+            # publish license plate
+            self.license_plate_publisher.publish(str(f'Team8,multi21,{self.current_parking_spot},{best_guess}'))
+            self.guesses = []
+            self.current_parking_spot += 1
+
         image = self.bridge.imgmsg_to_cv2(data, 'bgr8')
         hsv_feed = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         # Find bounding box for license plate and parking number
@@ -194,8 +227,11 @@ class LicensePlateDetection:
                             out = np.concatenate(imgs, axis=1)
                             self.show(out, 'full plate')
 
+                            # update timestamp
+                            self.license_plate_read_timestamp = time.time()
                             pred = self.character_forwards_pass(imgs)
                             print(str(pred) + ' ' + str(time.time()))      
+                            self.guesses.append(self.char_array_to_string(pred))
                             #cv2.moveWindow("char0", 650, 50)
                             #cv2.moveWindow("char1", 950, 50)
                             #cv2.moveWindow("char2", 950, 200)
