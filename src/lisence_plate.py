@@ -1,6 +1,7 @@
 import controller
 import string
 import rospy
+import time
 from enum import Enum
 import numpy as np
 from geometry_msgs.msg import Twist
@@ -11,7 +12,7 @@ from cv_bridge import CvBridge
 import cv2
 import tensorflow as tf
 # Constants
-CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/char_recog_resize'
+CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/char_recog_resize_2'
 # relative paths (inside ASSETS FOLDER)
 bridge = CvBridge()
 model = tf.keras.models.load_model(CHARACTER_RECOGNITION_MODEL_PATH)
@@ -100,8 +101,8 @@ def label_license_plate(data):
         #print(biggest_area)
         if (len(contours)> 0):
             x,y,w,h = cv2.boundingRect(contours[-1])
-            draw_rect(x,y,w,h, lisence_mask_stacked)
-            show(lisence_mask_stacked, 'lisence mask')
+            # draw_rect(x,y,w,h, lisence_mask_stacked)
+            # show(lisence_mask_stacked, 'lisence mask')
             if 100000 > biggest_area:
                 #print(biggest_area)
                 x,y,w,h = cv2.boundingRect(contours[-1])
@@ -170,7 +171,7 @@ def label_license_plate(data):
                     show(out, 'full plate')
 
                     pred = character_forwards_pass(imgs)
-                    print(pred)      
+                    print(str(pred) + ' ' + str(time.time()))      
                     #cv2.moveWindow("char0", 650, 50)
                     #cv2.moveWindow("char1", 950, 50)
                     #cv2.moveWindow("char2", 950, 200)
