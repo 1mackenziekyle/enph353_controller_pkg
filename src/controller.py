@@ -63,7 +63,7 @@ COLOR_CONVERTER = cv2.COLOR_BGR2GRAY
 RESIZE_FACTOR = 20
 
 # ========== Operating 
-OPERATING_MODE = Operating_Mode.MANUAL
+OPERATING_MODE = Operating_Mode.MODEL
 TEST_INNER_LOOP = False
 
 # ========== Model Settings

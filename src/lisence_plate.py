@@ -120,13 +120,13 @@ class LicensePlateDetection:
 
     def label_license_plate(self, data):
         # update timestamp
-        # if len(self.guesses) > 0 and time.time() - self.license_plate_read_timestamp > self.cooldown:
-        #     best_guess = self.most_frequent(self.guesses)
-        #     print(f'Best guesss out of {len(self.guesses)}: ', best_guess)
-        #     # publish license plate
-        #     self.license_plate_publisher.publish(str(f'Team8,multi21,{self.current_parking_spot},{best_guess}'))
-        #     self.guesses = []
-        #     self.current_parking_spot += 1
+        if len(self.guesses) > 0 and time.time() - self.license_plate_read_timestamp > self.cooldown:
+            best_guess = self.most_frequent(self.guesses)
+            print(f'Best guesss out of {len(self.guesses)}: ', best_guess)
+            # publish license plate
+            self.license_plate_publisher.publish(str(f'Team8,multi21,{self.current_parking_spot},{best_guess}'))
+            self.guesses = []
+            self.current_parking_spot += 1
         # mask out everything but the license plate box
         camera_feed = self.bridge.imgmsg_to_cv2(data, 'bgr8')
         hsv_feed = cv2.cvtColor(camera_feed, cv2.COLOR_BGR2HSV)
@@ -172,15 +172,14 @@ class LicensePlateDetection:
                 license_plate_image = camera_feed[y:y+h, x:x+w]
                 license_plate_image_hsv = cv2.cvtColor(license_plate_image, cv2.COLOR_BGR2HSV)
                 license_plate_blue_mask = cv2.inRange(license_plate_image_hsv, min_blue_letters, max_blue_letters)
-                # license_plate_blue_mask_eroded = cv2.erode(license_plate_blue_mask, np.ones((2,2), np.uint8), iterations=1)
-                # ======= LETTER CONTOURS =========
                 letter_contours, letter_hierarchy = cv2.findContours(image=license_plate_blue_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
                 letter_contours = [c for c in letter_contours if cv2.contourArea(c) > 2]
-                # take 4 central contours
-                letter_contours = sorted(letter_contours, key=lambda c: abs(cv2.boundingRect(c)[0] - license_plate_blue_mask.shape[1]//2))[:4] 
-                # sort by x position
-                letter_contours = sorted(letter_contours, key=lambda c: cv2.boundingRect(c)[0])
-                print(len(letter_contours), 'contours')
+                
+                letter_contours = sorted(letter_contours, key=lambda c: abs(cv2.boundingRect(c)[0] - license_plate_blue_mask.shape[1]//2))[:4] # take 4 central contours
+                
+                letter_contours = sorted(letter_contours, key=lambda c: cv2.boundingRect(c)[0]) # sort by x position
+                if len(letter_contours) == 0:
+                    return
                 # letter images
                 letter_boxes = []
                 for c in letter_contours:
@@ -202,17 +201,23 @@ class LicensePlateDetection:
                     letter_boxes.insert(indexLargest+1, (x+w//2,y,w//2,h)) # right half
                     letter_boxes[indexLargest]= (x,y,w//2,h) # left half
                     # TODO: If model isnt good at letters with blackspace around it, resize image to fit contour once split into 2 to get rid of black space
-                # for x,y,w,h in letter_boxes:
-                #     cv2.rectangle(license_plate_blue_mask,(x-1,y-1),(x+w+1,y+h+1),255,1)
-                #     cv2.putText(license_plate_blue_mask, str(cv2.contourArea(c)),  (x,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.25, 255, 1)
-                cv2.imshow('Letters!', np.concatenate([cv2.resize(license_plate_blue_mask[y:y+h,x:x+w], (20,20)) for x,y,w,h in letter_boxes], axis=1))
+                guess = ""
+                for i, (x,y,w,h) in enumerate(letter_boxes):
+                    model_input = tf.expand_dims(tf.expand_dims(cv2.resize(license_plate_image_hsv[y:y+h,x:x+w,1], (20,20)),0),-1)
+                    if i < 2:
+                        guess += self.itoc[np.argmax(tf.squeeze(self.model(model_input),0)[:26])]
+                    else:
+                        guess += self.itoc[26 + np.argmax(tf.squeeze(self.model(model_input),0)[26:])]
+                print('Guess: ', guess)
+                self.guesses.append(guess)
+                self.license_plate_read_timestamp = time.time()
+                cv2.imshow('Letters!', np.concatenate([cv2.resize(license_plate_image_hsv[y:y+h,x:x+w,1], (20,20)) for x,y,w,h in letter_boxes], axis=1))
                 cv2.imshow('License plate', self.downsample(license_plate_blue_mask, 0.5))
                 cv2.waitKey(1)
                 print(f'License plate found, {len(letter_contours)} contours.')
             else: 
                 print('License plate on edge of image')
         else: 
-            print('No license plate found')
             cv2.imshow('mask', self.downsample(lisence_mask, 1.5))
         cv2.waitKey(1)
         # ========= DEBUGGING LISENCE PLATE CONDITIONS =========
