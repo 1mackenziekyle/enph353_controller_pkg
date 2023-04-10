@@ -23,7 +23,7 @@ CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/char_recog_resize_2'
 
 # relative paths (inside ASSETS FOLDER)
 class LicensePlateDetection:
-    def __init__(self, model_path, cooldown=0.8):
+    def __init__(self, model_path, cooldown=1.0):
         self.bridge = CvBridge()
         self.model = tf.keras.models.load_model(model_path)
         self.cooldown = cooldown
@@ -107,6 +107,13 @@ class LicensePlateDetection:
                 count, itm = dict[item], item
         return(itm)
 
+    def most_common(self, list):
+        most_common_item = max(set(list), key=list.count)
+        if list.count(most_common_item) == 1:
+            return list[-1]
+        else:
+            return most_common_item
+
 
     def char_array_to_string(self, s):
         # initialization of string to ""
@@ -121,8 +128,8 @@ class LicensePlateDetection:
     def label_license_plate(self, data):
         # update timestamp
         if len(self.guesses) > 0 and time.time() - self.license_plate_read_timestamp > self.cooldown:
-            best_guess = self.most_frequent(self.guesses)
-            print(f'Best guesss out of {len(self.guesses)}: ', best_guess)
+            best_guess = self.most_common(self.guesses)
+            print(f'Best guess out of {len(self.guesses)}: ', best_guess)
             # publish license plate
             self.license_plate_publisher.publish(str(f'Team8,multi21,{self.current_parking_spot},{best_guess}'))
             self.guesses = []
@@ -153,7 +160,7 @@ class LicensePlateDetection:
         # only take contours based on area and aspect ratio
         # calculate aspect ratio: 
         contours = [c for c in contours if 2.0 > cv2.boundingRect(c)[2]/cv2.boundingRect(c)[3] > 0.4 
-                                        and cv2.contourArea(c) > 8000 # TODO: MAX AREA
+                                        and cv2.contourArea(c) > 10000 # TODO: MAX AREA
                                         and cv2.contourArea(c) / (cv2.boundingRect(c)[2]*cv2.boundingRect(c)[3]) > 0.7]
         # ========= DEBUGGING LISENCE PLATE CONDITIONS =========
         if len(contours) > 0:
@@ -197,7 +204,6 @@ class LicensePlateDetection:
                 if len(letter_contours) == 3:
                     indexLargest = np.argmax([cv2.contourArea(c) for c in letter_contours])
                     x,y,w,h = cv2.boundingRect(letter_contours[indexLargest])
-                    print('indexLargest: ', indexLargest)
                     letter_boxes.insert(indexLargest+1, (x+w//2,y,w//2,h)) # right half
                     letter_boxes[indexLargest]= (x,y,w//2,h) # left half
                     # TODO: If model isnt good at letters with blackspace around it, resize image to fit contour once split into 2 to get rid of black space
@@ -208,15 +214,13 @@ class LicensePlateDetection:
                         guess += self.itoc[np.argmax(tf.squeeze(self.model(model_input),0)[:26])]
                     else:
                         guess += self.itoc[26 + np.argmax(tf.squeeze(self.model(model_input),0)[26:])]
-                print('Guess: ', guess)
+                print(f'P{self.current_parking_spot} Guess: ', guess)
                 self.guesses.append(guess)
                 self.license_plate_read_timestamp = time.time()
                 cv2.imshow('Letters!', np.concatenate([cv2.resize(license_plate_image_hsv[y:y+h,x:x+w,1], (20,20)) for x,y,w,h in letter_boxes], axis=1))
                 cv2.imshow('License plate', self.downsample(license_plate_blue_mask, 0.5))
                 cv2.waitKey(1)
-                print(f'License plate found, {len(letter_contours)} contours.')
-            else: 
-                print('License plate on edge of image')
+                # print(f'License plate found, {len(letter_contours)} contours.')
         else: 
             cv2.imshow('mask', self.downsample(lisence_mask, 1.5))
         cv2.waitKey(1)
