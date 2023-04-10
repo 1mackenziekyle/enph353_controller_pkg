@@ -59,6 +59,7 @@ class LicensePlateDetection:
         cv2.imshow(label, image)
         cv2.waitKey(1)
 
+    
 
     def get_min_aspect_ratio(self, contour):
         rect = cv2.minAreaRect(contour)
@@ -90,6 +91,11 @@ class LicensePlateDetection:
     def find_x_value(self, contour):
         x,y,w,h = cv2.boundingRect(contour)
         return x
+
+    
+    def downsample(self, image, factor):
+        resized_shape = (int(image.shape[1] / factor), int(image.shape[0] / factor))
+        return cv2.resize(image, resized_shape, interpolation=cv2.INTER_AREA)
     
 
     def most_frequent(self, List):
@@ -114,16 +120,16 @@ class LicensePlateDetection:
 
     def label_license_plate(self, data):
         # update timestamp
-        if len(self.guesses) > 0 and time.time() - self.license_plate_read_timestamp > self.cooldown:
-            best_guess = self.most_frequent(self.guesses)
-            print(f'Best guesss out of {len(self.guesses)}: ', best_guess)
-            # publish license plate
-            self.license_plate_publisher.publish(str(f'Team8,multi21,{self.current_parking_spot},{best_guess}'))
-            self.guesses = []
-            self.current_parking_spot += 1
-
-        image = self.bridge.imgmsg_to_cv2(data, 'bgr8')
-        hsv_feed = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        # if len(self.guesses) > 0 and time.time() - self.license_plate_read_timestamp > self.cooldown:
+        #     best_guess = self.most_frequent(self.guesses)
+        #     print(f'Best guesss out of {len(self.guesses)}: ', best_guess)
+        #     # publish license plate
+        #     self.license_plate_publisher.publish(str(f'Team8,multi21,{self.current_parking_spot},{best_guess}'))
+        #     self.guesses = []
+        #     self.current_parking_spot += 1
+        # mask out everything but the license plate box
+        camera_feed = self.bridge.imgmsg_to_cv2(data, 'bgr8')
+        hsv_feed = cv2.cvtColor(camera_feed, cv2.COLOR_BGR2HSV)
         # Find bounding box for license plate and parking number
         min_grey = (0, 0, 97)
         max_grey = (0,0, 210)
@@ -133,8 +139,6 @@ class LicensePlateDetection:
         max_blue = (125, 210, 200)
         min_blue_letters = (110, 100, 85)
         max_blue_letters = (125, 245, 197)
-        #max_blue_letters_model = (125,245,200)
-        #min_blue_letters_model = (110,100,90)
         blue_mask = cv2.inRange(hsv_feed, min_blue, max_blue)
         outer_mask = cv2.inRange(hsv_feed, min_grey, max_grey) 
         plate_mask = cv2.inRange(hsv_feed, min_plate_grey, max_plate_grey)
@@ -144,99 +148,74 @@ class LicensePlateDetection:
         # blur and threshold to get rid of lines
         lisence_mask = cv2.GaussianBlur(lisence, (31, 31), cv2.BORDER_DEFAULT)
         _, lisence_mask = cv2.threshold(lisence_mask, 190, 255, cv2.THRESH_BINARY)
-        # lisence_mask_stacked = np.stack([lisence_mask, lisence_mask, lisence_mask], axis=-1)
-        # find biggest c    ontour
+        # find biggest contour
         contours, hierarchy = cv2.findContours(image=lisence_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
-        contours = [c for c in contours if self.get_min_aspect_ratio(c) > .5]
-        contours = [c for c in contours if cv2.contourArea(c) > 4000]
-        contours = [c for c in contours if self.get_area_ar_ratio(c) < .0001]
-        if (len(contours) > 0):
-            contours = sorted(contours, key = lambda x : cv2.contourArea(x)) # sort by area
-            biggest_area = cv2.contourArea(contours[-1])
-            if (biggest_area < 15000):
-                contours = [c for c in contours if self.get_min_aspect_ratio(c) > .75]
-                #print(biggest_area)
-                if (len(contours)> 0):
-                    x,y,w,h = cv2.boundingRect(contours[-1])
-                    # draw_rect(x,y,w,h, lisence_mask_stacked)
-                    # show(lisence_mask_stacked, 'lisence mask')
-                    if 100000 > biggest_area:
-                        #print(biggest_area)
-                        x,y,w,h = cv2.boundingRect(contours[-1])
-                        if x > 0 and x + w < lisence_mask.shape[1] : 
-                            # read license plate
-                            cv2.rectangle(image,(x,y),(x+w,y+h),(0,0,255),6) 
-                            lisence_plate_img = image[y:y+h, x:x+w]
-                            lisence_plate_img_hsv = cv2.cvtColor(lisence_plate_img, cv2.COLOR_BGR2HSV)
-                            #print(lisence_plate_img_hsv.shape)
-                            lisence_plate_chars = cv2.inRange(lisence_plate_img_hsv, min_blue_letters, max_blue_letters)
-                            lisence_chars_stacked = np.stack([lisence_plate_chars, lisence_plate_chars, lisence_plate_chars], axis=-1)
-                            char_contours, hierarchy = cv2.findContours(image=lisence_plate_chars, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
-                            char_contours = [c for c in char_contours if cv2.contourArea(c) > 5]
-                            char_contours = [c for c in char_contours if self.get_aspect_ratio(c) < 4]
-                            char_contours = sorted(char_contours, key = lambda x : cv2.contourArea(x)) # sort by area
-                            #print(len(char_contours))
-                            num_contours = 0;
-                            char_contours.reverse() 
-                            char_img = []
-                            char_img_x_val = []
-                            if (len(char_contours) >= 4):
-                                slice_bool = False
-                                num_slices = 0
-                                del char_contours[4:]
-                            elif(len(char_contours) <= 1):
-                                slice_bool = False
-                                num_slices = 0
-                            else:
-                                slice_bool = True
-                                num_slices = 4 - len(char_contours)
-                            for contour in char_contours:
-                                #print(get_aspect_ratio(contour))
-                                if (num_slices > 0 and slice_bool):
-                                    x1,y1,w1,h1 = self.slice(contour, True)
-                                    x2,y2,w2,h2 = self.slice(contour, False)
-                                    self.draw_rect(x1, y1, w1, h1, lisence_chars_stacked)
-                                    self.draw_rect(x2, y2, w2, h2, lisence_chars_stacked)
-                                    char = lisence_plate_img_hsv[y1:y1 + h1, x1: x1 + w1]
-                                    char_s = char[:, :, 1]
-                                    char_s = cv2.resize(char_s, (20,20))
-                                    char_img.append(char_s)
-                                    char_img_x_val.append(x1)
-                                    #show(char_s, label='char' + str(num_contours))
-                                    num_contours += 1
-                                    char2 = lisence_plate_img_hsv[y2:y2 + h2, x2: x2 + w2]
-                                    char_s2 = char2[:, :, 1]
-                                    char_s2 = cv2.resize(char_s2, (20,20))
-                                    char_img.append(char_s2)
-                                    char_img_x_val.append(x2)
-                                # show(char_s2, label='char' + str(num_contours))
-                                    num_contours += 1
-                                    num_slices = num_slices - 1
-                                else:
-                                    x1,y1,w1,h1 = cv2.boundingRect(contour)
-                                    self.draw_rect(x1, y1, w1, h1, lisence_chars_stacked)
-                                    char = lisence_plate_img_hsv[y1:y1 + h1, x1: x1 + w1]
-                                    char_s = char[:, :, 1]
-                                    char_s = cv2.resize(char_s, (20,20))
-                                    char_img.append(char_s)
-                                    char_img_x_val.append(x1)
-                                    #show(char_s, label='char' + str(num_contours))
-                                    num_contours += 1
-                            imgs, x_vals = zip(*sorted(zip(char_img, char_img_x_val), key= lambda b:b[1]))
-                            imgs = list(imgs)
-                            out = np.concatenate(imgs, axis=1)
-                            self.show(out, 'full plate')
-
-                            # update timestamp
-                            self.license_plate_read_timestamp = time.time()
-                            pred = self.character_forwards_pass(imgs)
-                            print(str(pred) + ' ' + str(time.time()))      
-                            self.guesses.append(self.char_array_to_string(pred))
-                            #cv2.moveWindow("char0", 650, 50)
-                            #cv2.moveWindow("char1", 950, 50)
-                            #cv2.moveWindow("char2", 950, 200)
-                            #cv2.moveWindow("char3", 650, 200)
-                            self.show(lisence_chars_stacked, label='lisence')
+        # only take contours based on area and aspect ratio
+        # calculate aspect ratio: 
+        contours = [c for c in contours if 2.0 > cv2.boundingRect(c)[2]/cv2.boundingRect(c)[3] > 0.4 
+                                        and cv2.contourArea(c) > 8000 # TODO: MAX AREA
+                                        and cv2.contourArea(c) / (cv2.boundingRect(c)[2]*cv2.boundingRect(c)[3]) > 0.7]
+        # ========= DEBUGGING LISENCE PLATE CONDITIONS =========
+        if len(contours) > 0:
+            maxContour = max(contours, key=cv2.contourArea)
+            x,y,w,h = cv2.boundingRect(maxContour)
+            if x > 0 and x + w  < camera_feed.shape[1]-1: # ensure not on edge of image
+                stacked = np.stack((lisence_mask,)*3, axis=-1)
+                cv2.rectangle(stacked,(x-1,y-1),(x+w+1,y+h+1),(0, 255, 0),2)
+                cv2.putText(stacked, 'A: ' + str(round(cv2.contourArea(maxContour) / 1000, 2)) + 'k', (x,y-10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
+                aspect_ratio = w/h
+                cv2.putText(stacked, 'w/h: ' + str(round(aspect_ratio, 3)), (x,y-40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
+                cv2.putText(stacked, '% filled: ' + str(round(cv2.contourArea(maxContour) / (w*h), 2 )), (x,y-70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
+                cv2.putText(stacked, 'x: ' + str((cv2.boundingRect(maxContour)[0] - stacked.shape[1]//2)/stacked.shape[1]), (x,y-100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
+                cv2.imshow('mask', self.downsample(stacked, 1.5))
+                # crop license plate
+                license_plate_image = camera_feed[y:y+h, x:x+w]
+                license_plate_image_hsv = cv2.cvtColor(license_plate_image, cv2.COLOR_BGR2HSV)
+                license_plate_blue_mask = cv2.inRange(license_plate_image_hsv, min_blue_letters, max_blue_letters)
+                # license_plate_blue_mask_eroded = cv2.erode(license_plate_blue_mask, np.ones((2,2), np.uint8), iterations=1)
+                # ======= LETTER CONTOURS =========
+                letter_contours, letter_hierarchy = cv2.findContours(image=license_plate_blue_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
+                letter_contours = [c for c in letter_contours if cv2.contourArea(c) > 2]
+                # take 4 central contours
+                letter_contours = sorted(letter_contours, key=lambda c: abs(cv2.boundingRect(c)[0] - license_plate_blue_mask.shape[1]//2))[:4] 
+                # sort by x position
+                letter_contours = sorted(letter_contours, key=lambda c: cv2.boundingRect(c)[0])
+                print(len(letter_contours), 'contours')
+                # letter images
+                letter_boxes = []
+                for c in letter_contours:
+                    x,y,w,h = cv2.boundingRect(c)
+                    letter_boxes.append((x,y,w,h)) # x,y,w,h
+                # Case: 2 big contours
+                if len(letter_contours) == 2:
+                    # split contours into 2 
+                    x1,y1,w1,h1 = cv2.boundingRect(letter_contours[0]) # letters
+                    x2,y2,w2,h2 = cv2.boundingRect(letter_contours[1]) # numbers
+                    letter_boxes.insert(2, (x2+w2//2,y2,w2//2,h2)) # second number
+                    letter_boxes.insert(1, (x1+w1//2,y1,w1//2,h1)) # second letter
+                    letter_boxes[0] = (x1,y1,w1//2,h1) # first letter
+                    letter_boxes[2] = (x2,y2,w2//2,h2) # first number
+                if len(letter_contours) == 3:
+                    indexLargest = np.argmax([cv2.contourArea(c) for c in letter_contours])
+                    x,y,w,h = cv2.boundingRect(letter_contours[indexLargest])
+                    print('indexLargest: ', indexLargest)
+                    letter_boxes.insert(indexLargest+1, (x+w//2,y,w//2,h)) # right half
+                    letter_boxes[indexLargest]= (x,y,w//2,h) # left half
+                    # TODO: If model isnt good at letters with blackspace around it, resize image to fit contour once split into 2 to get rid of black space
+                # for x,y,w,h in letter_boxes:
+                #     cv2.rectangle(license_plate_blue_mask,(x-1,y-1),(x+w+1,y+h+1),255,1)
+                #     cv2.putText(license_plate_blue_mask, str(cv2.contourArea(c)),  (x,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.25, 255, 1)
+                cv2.imshow('Letters!', np.concatenate([cv2.resize(license_plate_blue_mask[y:y+h,x:x+w], (20,20)) for x,y,w,h in letter_boxes], axis=1))
+                cv2.imshow('License plate', self.downsample(license_plate_blue_mask, 0.5))
+                cv2.waitKey(1)
+                print(f'License plate found, {len(letter_contours)} contours.')
+            else: 
+                print('License plate on edge of image')
+        else: 
+            print('No license plate found')
+            cv2.imshow('mask', self.downsample(lisence_mask, 1.5))
+        cv2.waitKey(1)
+        # ========= DEBUGGING LISENCE PLATE CONDITIONS =========
 
 
 
