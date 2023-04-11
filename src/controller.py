@@ -336,6 +336,14 @@ class Controller:
 
 
 # ==================== Utility Functions =======================
+    def handle_plate_number(self, plate_number):
+        print('Plate Number: ', plate_number.data)
+        if int(plate_number.data) == 7:
+            self.state = ControllerState.DRIVE_INNER_LOOP
+        return
+
+
+
     def early_check_for_pedestrian(self):
         min_skin =(5,60,60)
         max_skin = (12,90,90)

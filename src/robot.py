@@ -37,6 +37,7 @@ robot = controller.Controller(
 # set up subscribers
 rospy.Subscriber('/R1/pi_camera/image_raw', Image, callback=robot.step)
 rospy.Subscriber('R1/cmd_vel', Twist, callback=robot.store_velocities)
+rospy.Subscriber('/plate_number', String, callback=robot.handle_plate_number)
 
 # forever
 rospy.spin()
