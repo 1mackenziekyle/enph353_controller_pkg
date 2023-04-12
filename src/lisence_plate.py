@@ -41,6 +41,8 @@ class LicensePlateDetection:
     def label_license_plate(self, data):
         # update timestamp
         if len(self.guesses) > 0 and time.time() - self.license_plate_read_timestamp > self.cooldown:
+            if len(self.guesses) >= 10:
+                self.guesses = self.guesses[5:] # only take last (n-5) guesses if n > 9
             best_guess = self.most_common(self.guesses)
             print(f'Best guess out of {len(self.guesses)}: ', best_guess)
             # publish license plate
@@ -86,10 +88,12 @@ class LicensePlateDetection:
                 stacked = np.stack((lisence_mask,)*3, axis=-1)
                 cv2.rectangle(stacked,(x-1,y-1),(x+w+1,y+h+1),(0, 255, 0),2)
                 cv2.putText(stacked, 'A: ' + str(round(cv2.contourArea(maxContour) / 1000, 2)) + 'k', (x,y-10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
-                aspect_ratio = w/h
-                cv2.putText(stacked, 'w/h: ' + str(round(aspect_ratio, 3)), (x,y-40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
-                cv2.putText(stacked, '% filled: ' + str(round(cv2.contourArea(maxContour) / (w*h), 2 )), (x,y-70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
-                cv2.putText(stacked, 'x: ' + str((cv2.boundingRect(maxContour)[0] - stacked.shape[1]//2)/stacked.shape[1]), (x,y-100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
+                aspect_ratio = round(w/h, 3)
+                percent_filled = round(cv2.contourArea(maxContour) / (w*h), 2)
+                x_dist = round((cv2.boundingRect(maxContour)[0] - stacked.shape[1]//2)/stacked.shape[1], 2)
+                cv2.putText(stacked, 'w/h: ' + str(aspect_ratio), (x,y-40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
+                cv2.putText(stacked, '% filled: ' + str(percent_filled), (x,y-70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
+                cv2.putText(stacked, 'x: ' + str(x_dist), (x,y-100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
                 cv2.imshow('mask', self.downsample(stacked, 1.5))
                 # crop license plate
                 license_plate_image = camera_feed[y:y+h, x:x+w]
@@ -118,7 +122,7 @@ class LicensePlateDetection:
                     for i, (x,y,w,h) in enumerate(letter_boxes):
                         contours, hierarchy = cv2.findContours(image=license_plate_blue_mask[y:y+h,x:x+w], mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
                         x2,y2,w2,h2, = cv2.boundingRect(max(contours, key=cv2.contourArea))
-                        letter_boxes = (x+x2,y+y2,w2,h2)
+                        letter_boxes[i] = (x+x2,y+y2,w2,h2)
                 if len(letter_contours) == 3:
                     indexLargest = np.argmax([cv2.contourArea(c) for c in letter_contours])
                     x,y,w,h = cv2.boundingRect(letter_contours[indexLargest])
@@ -138,7 +142,7 @@ class LicensePlateDetection:
                         guess += self.itoc[np.argmax(tf.squeeze(self.model(model_input),0)[:26])]
                     else:
                         guess += self.itoc[26 + np.argmax(tf.squeeze(self.model(model_input),0)[26:])]
-                print(f'P{self.current_parking_spot} Guess: ', guess, f'Area: {int(cv2.contourArea(maxContour)/1000)}k')
+                print(f'P{self.current_parking_spot} Guess: ', guess, f'A: {int(cv2.contourArea(maxContour)/1000)}k, ar: {aspect_ratio}, x: {x_dist}')
                 self.guesses.append(guess)
                 self.license_plate_read_timestamp = time.time()
                 cv2.imshow('Letters!', np.concatenate([cv2.resize(license_plate_image_hsv[y:y+h,x:x+w,1], (20,20)) for x,y,w,h in letter_boxes], axis=1))
