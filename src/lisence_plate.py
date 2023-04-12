@@ -23,7 +23,7 @@ CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/char_recog_resize_4'
 
 # relative paths (inside ASSETS FOLDER)
 class LicensePlateDetection:
-    def __init__(self, model_path, cooldown=0.8):
+    def __init__(self, model_path, cooldown=1.0):
         self.bridge = CvBridge()
         self.model = tf.keras.models.load_model(model_path)
         self.cooldown = cooldown
@@ -130,14 +130,15 @@ class LicensePlateDetection:
                         x2,y2,w2,h2 = cv2.boundingRect(max(contours, key=cv2.contourArea))
                         letter_boxes[i] = (x+x2,y+y2,w2,h2)
                 guess = ""
-                print(len(letter_boxes))
+                # reduncancy: Resort by ascending x position
+                letter_boxes = sorted(letter_boxes, key=lambda c: c[0])
                 for i, (x,y,w,h) in enumerate(letter_boxes):
                     model_input = tf.expand_dims(tf.expand_dims(cv2.resize(license_plate_image_hsv[y:y+h,x:x+w,1], (20,20)),0),-1)
                     if i < 2:
                         guess += self.itoc[np.argmax(tf.squeeze(self.model(model_input),0)[:26])]
                     else:
                         guess += self.itoc[26 + np.argmax(tf.squeeze(self.model(model_input),0)[26:])]
-                print(f'P{self.current_parking_spot} Guess: ', guess)
+                print(f'P{self.current_parking_spot} Guess: ', guess, f'Area: {int(cv2.contourArea(maxContour)/1000)}k')
                 self.guesses.append(guess)
                 self.license_plate_read_timestamp = time.time()
                 cv2.imshow('Letters!', np.concatenate([cv2.resize(license_plate_image_hsv[y:y+h,x:x+w,1], (20,20)) for x,y,w,h in letter_boxes], axis=1))
