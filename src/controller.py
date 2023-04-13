@@ -475,6 +475,8 @@ class Controller:
                                                 F    L    R 
         """
         camera_feed_gray =  self.downsample_image(camera_feed, self.image_resize_factor, color_converter=cv2.COLOR_BGR2GRAY) # downsample
+        cv2.imshow('Model input', camera_feed_gray)
+        cv2.waitKey(1)
         camera_feed_gray = tf.expand_dims(camera_feed_gray, 0) # expand batch dim = 1
         softmaxes = tf.squeeze(self.outer_loop_driving_model(camera_feed_gray),0) # Squeeze output shape: (1, N) --> (N)
         return softmaxes
