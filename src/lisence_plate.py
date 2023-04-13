@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import controller
 import string
 import rospy
@@ -15,7 +16,7 @@ import tensorflow as tf
 
 
 # Constants
-CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/char_recog_resize_4'
+CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/char_recog_resize_5'
 
 
 
@@ -101,7 +102,7 @@ class LicensePlateDetection:
                 license_plate_blue_mask = cv2.inRange(license_plate_image_hsv, min_blue_letters, max_blue_letters)
                 letter_contours, letter_hierarchy = cv2.findContours(image=license_plate_blue_mask, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_NONE)
                 letter_contours = [c for c in letter_contours if cv2.contourArea(c) > 2]
-                letter_contours = sorted(letter_contours, key=lambda c: abs(cv2.boundingRect(c)[0] - license_plate_blue_mask.shape[1]//2))[:4] # take 4 central contours
+                letter_contours = sorted(letter_contours, key=lambda c: abs(cv2.boundingRect(c)[1] - license_plate_blue_mask.shape[0]//2) + abs(cv2.boundingRect(c)[0] - license_plate_blue_mask.shape[1]//2))[:4] # take 4 central contours
                 letter_contours = sorted(letter_contours, key=lambda c: cv2.boundingRect(c)[0]) # sort by x position
                 if len(letter_contours) == 0:
                     return
@@ -136,6 +137,7 @@ class LicensePlateDetection:
                 guess = ""
                 # reduncancy: Resort by ascending x position
                 letter_boxes = sorted(letter_boxes, key=lambda c: c[0])
+
                 for i, (x,y,w,h) in enumerate(letter_boxes):
                     model_input = tf.expand_dims(tf.expand_dims(cv2.resize(license_plate_image_hsv[y:y+h,x:x+w,1], (20,20)),0),-1)
                     if i < 2:
@@ -146,6 +148,10 @@ class LicensePlateDetection:
                 self.guesses.append(guess)
                 self.license_plate_read_timestamp = time.time()
                 cv2.imshow('Letters!', np.concatenate([cv2.resize(license_plate_image_hsv[y:y+h,x:x+w,1], (20,20)) for x,y,w,h in letter_boxes], axis=1))
+                # ====== DEBUG DRAW BOUNDIGN RECTS ======
+                for x,y,w,h in letter_boxes:
+                    cv2.rectangle(license_plate_image_hsv, (x,y), (x+w,y+h),(255,)*3, 1)
+                # ====== DEBUG DRAW BOUNDIGN RECTS ======
                 cv2.imshow('License plate', self.downsample(license_plate_image_hsv, 0.5))
                 cv2.waitKey(1)
                 # print(f'License plate found, {len(letter_contours)} contours.')

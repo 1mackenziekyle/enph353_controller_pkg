@@ -1,0 +1,12 @@
+<launch>
+   <node pkg="controller_pkg"
+         type="robot.py"
+         name="move_robot" 
+         output="screen">
+   </node>
+   <node pkg="controller_pkg"
+         type="lisence_plate.py"
+         name="lisence_identifying"
+         output="screen">
+   </node>
+</launch>

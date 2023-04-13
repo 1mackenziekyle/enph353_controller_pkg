@@ -177,7 +177,7 @@ class Controller:
         # start manual driving if in manual mode
         elif self.operating_mode == Operating_Mode.MANUAL or self.operating_mode == Operating_Mode.TAKE_PICTURES or self.operating_mode == Operating_Mode.SADDLE:
             self.state = ControllerState.MANUAL_DRIVE
-        time.sleep(2) # wait 1 second for ros to initialize completely
+        time.sleep(3) # wait 1 second for ros to initialize completely
         self.license_plate_publisher.publish(str('Team8,multi21,0,XR58'))
         return
 
@@ -338,10 +338,11 @@ class Controller:
 # ==================== Utility Functions =======================
     def handle_plate_number(self, plate_number):
         print('Plate Number: ', plate_number.data)
-        if int(plate_number.data) == 7:
-            self.state = ControllerState.DRIVE_INNER_LOOP
-        if int(plate_number.data) == 9:
-            self.state = ControllerState.END
+        if self.operating_mode is not Operating_Mode.MANUAL:
+            if int(plate_number.data) == 7:
+                self.state = ControllerState.DRIVE_INNER_LOOP
+            if int(plate_number.data) == 9:
+                self.state = ControllerState.END
         return
 
 
