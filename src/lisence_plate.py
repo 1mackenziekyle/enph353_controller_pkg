@@ -16,7 +16,7 @@ import tensorflow as tf
 
 
 # Constants
-CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/char_recog_resize_5'
+CHARACTER_RECOGNITION_MODEL_PATH = ASSETS_FOLDER + 'models/char_recog_resize_4'
 
 
 

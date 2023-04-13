@@ -128,10 +128,10 @@ class Controller:
         start_time = time.time()
         self.iters+=1
         self.camera_feed = self.convert_image_topic_to_cv_image(data)
-        if self.iters == 300 and self.operating_mode == Operating_Mode.MODEL:
-            self. state = ControllerState.DRIVE_INNER_LOOP # TODO: REMOVE WHEN LICENSE PLATES DONE
-        if self.iters == 850 and self.operating_mode == Operating_Mode.MODEL:
-            self.state = ControllerState.END
+        # if self.iters == 300 and self.operating_mode == Operating_Mode.MODEL:
+        #     self. state = ControllerState.DRIVE_INNER_LOOP # TODO: REMOVE WHEN LICENSE PLATES DONE
+        # if self.iters == 850 and self.operating_mode == Operating_Mode.MODEL:
+        #     self.state = ControllerState.END
         # Jump to state
         self.RunCurrentState()
         # if self.operating_mode is Operating_Mode.MODEL: 
