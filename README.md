@@ -11,4 +11,6 @@ This project implements a basic self-driving robot using the Robot Operating Sys
 
 ## Letter Recognition
 - The jupyter notebook generates images of skewed, rotated, and blurred characters, and trains a simple MLP to infer the characters on a license plate.
+
+
 ![image](https://github.com/user-attachments/assets/e59e37cc-a12f-42e7-9982-a30ef38f2ddc)
